@@ -1,6 +1,3 @@
-from .redis_manager import (
-    RavQueue
-)
 from .manager import DBManager
 from .models import (
     Op,

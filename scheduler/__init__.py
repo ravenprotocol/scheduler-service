@@ -1,4 +1,4 @@
-from .db import (ravdb, RavQueue, Op,
+from .db import (ravdb, Op,
                  Graph,
                  Data,
                  Client,
