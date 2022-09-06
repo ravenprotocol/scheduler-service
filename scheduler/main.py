@@ -359,7 +359,7 @@ def run_scheduler():
         # print("Scheduler Running...")
         distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
         federated_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="federated", execute="True")
-        g.logger.debug("Graphs: {} {}".format(len(distributed_graphs), len(federated_graphs)))
+        # g.logger.debug("Graphs: {} {}".format(len(distributed_graphs), len(federated_graphs)))
         if len(distributed_graphs) == 0 and len(federated_graphs) == 0:
             # print("No graphs found")
             pass
