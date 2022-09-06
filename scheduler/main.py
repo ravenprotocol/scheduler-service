@@ -578,6 +578,7 @@ def run_scheduler():
 
 
 def update_client_status():
+    g.logger.debug("Update client status")
     clients = ravdb.get_idle_connected_clients(status='connected')
     g.logger.debug('# Connected Clients: {}'.format(len(clients)))
     for client in clients:
