@@ -1,6 +1,5 @@
 import ast
 import json
-
 import numpy as np
 import sqlalchemy as db
 from sqlalchemy import or_, and_
@@ -33,6 +32,10 @@ class DBManager(object):
     def __init__(self):
         self.create_database()
         self.engine, self.session = self.connect()
+        self.logger = None
+
+    def set_logger(self, logger):
+        self.logger = logger
 
     def connect(self):
         # print("Database uri:", RAVENVERSE_DATABASE_URI)
@@ -116,7 +119,7 @@ class DBManager(object):
 
             return obj
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -144,7 +147,7 @@ class DBManager(object):
             self.session.commit()
             return obj
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -153,7 +156,7 @@ class DBManager(object):
             self.session.delete(obj)
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -168,7 +171,7 @@ class DBManager(object):
             self.session.commit()
             return op
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -191,7 +194,7 @@ class DBManager(object):
             self.session.delete(op)
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -203,7 +206,7 @@ class DBManager(object):
             self.session.commit()
             return op
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -218,7 +221,7 @@ class DBManager(object):
             self.session.commit()
             return data
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -236,7 +239,7 @@ class DBManager(object):
             self.session.commit()
             return data
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -246,26 +249,28 @@ class DBManager(object):
             self.session.delete(data)
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
     def create_data_complete(self, data, data_type):
-        # print("Creating data:", data)
+        try:
+            if isinstance(data, (np.ndarray, np.generic)):
+                if data.ndim == 1:
+                    data = data[..., np.newaxis]
 
-        if isinstance(data, (np.ndarray, np.generic)):
-            if data.ndim == 1:
-                data = data[..., np.newaxis]
+            d = self.create_data(type=data_type)
 
-        d = self.create_data(type=data_type)
+            # Save file
+            file_path = save_data_to_file(d.id, data, data_type)
 
-        # Save file
-        file_path = save_data_to_file(d.id, data, data_type)
-
-        # Update file path
-        self.update(d, file_path=file_path)
-
-        return d
+            # Update file path
+            self.update(d, file_path=file_path)
+            return d
+        except Exception as e:
+            self.logger.error("Exception:{}".format(str(e)))
+            self.session.rollback()
+            return None
 
     def get_op_status(self, op_id):
         status = self.session.query(Op).get(op_id).status
@@ -344,7 +349,7 @@ class DBManager(object):
             self.session.commit()
             return graph
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -355,7 +360,7 @@ class DBManager(object):
             self.session.commit()
             return graph
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -379,27 +384,32 @@ class DBManager(object):
         return self.session.query(Op).filter(and_(Op.graph_id == graph_id, Op.name == op_name)).first()
 
     def delete_graph_ops(self, graph_id):
-        print("Deleting graph ops...")
+        self.logger.debug("Deleting graph ops...")
         ops = self.get_graph_ops(graph_id=graph_id)
 
-        for op in ops:
-            # print("Op id:{}".format(op.id))
-            data_ids = json.loads(op.outputs)
-            if data_ids is not None:
-                for data_id in data_ids:
-                    # print("Data id:{}".format(data_id))
+        try:
+            for op in ops:
+                # print("Op id:{}".format(op.id))
+                data_ids = json.loads(op.outputs)
+                if data_ids is not None:
+                    for data_id in data_ids:
+                        # print("Data id:{}".format(data_id))
 
-                    # print("Deleting Data file...")
-                    # Delete data file
-                    delete_data_file(data_id)
+                        # print("Deleting Data file...")
+                        # Delete data file
+                        delete_data_file(data_id)
 
-                    # print("Deleting Data object...")
-                    # Delete data object
-                    self.delete_data(data_id)
+                        # print("Deleting Data object...")
+                        # Delete data object
+                        self.delete_data(data_id)
 
-            # print("Deleting op...")
-            # Delete op object
-            self.delete(op)
+                # print("Deleting op...")
+                # Delete op object
+                self.delete(op)
+        except Exception as e:
+            self.logger.error("Exception:{}".format(str(e)))
+            self.session.rollback()
+            return None
 
     def create_client(self, **kwargs):
         try:
@@ -412,7 +422,7 @@ class DBManager(object):
             self.session.commit()
             return obj
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -475,7 +485,7 @@ class DBManager(object):
                 return None
             return clients.first()
         except Exception as e:
-            g.logger.debug("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             return None
 
     def update_client(self, client, **kwargs):
@@ -485,7 +495,7 @@ class DBManager(object):
             self.session.commit()
             return client
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -520,7 +530,7 @@ class DBManager(object):
 
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
 
     def disconnect_client(self, client_id):
@@ -529,7 +539,7 @@ class DBManager(object):
             client.status = "disconnected"
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
 
     def get_ops_by_name(self, op_name, graph_id=None):
@@ -623,6 +633,17 @@ class DBManager(object):
         else:
             return self.session.query(Client).filter(Client.role == 'contributor').all()
 
+    def get_idle_connected_clients(self, status=None):
+        """
+        Get a list of clients
+        """
+        if status is not None:
+            return self.session.query(Client).filter(Client.role == 'contributor').filter(
+                or_(Client.reporting == 'idle', Client.reporting == 'busy')).filter(Client.status == status).all()
+        else:
+            return self.session.query(Client).filter(Client.role == 'contributor').filter(
+                or_(Client.reporting == 'idle', Client.reporting == 'busy')).all()
+
     def get_idle_clients(self, reporting=None):
         """
         Get a list of idle clients based on reporting column
@@ -707,7 +728,7 @@ class DBManager(object):
             self.session.commit()
             return mapping
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -719,7 +740,7 @@ class DBManager(object):
             self.session.commit()
             return mapping
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -805,13 +826,13 @@ class DBManager(object):
                     .filter(Op.id == kwargs.get("id"))
                     .all()
             )
-            print(ops)
+            # print(ops)
             for op in ops:
                 for key, value in kwargs.items():
                     setattr(op, key, value)
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
 
     def update_federated_client_status(self, client, **kwargs):
@@ -821,9 +842,8 @@ class DBManager(object):
                 setattr(client, key, value)
             self.session.query(Op).commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
-            return None
 
     """
     Graph client mapping
@@ -840,7 +860,7 @@ class DBManager(object):
             self.session.commit()
             return mapping
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -852,7 +872,7 @@ class DBManager(object):
             self.session.commit()
             return mapping
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -882,7 +902,7 @@ class DBManager(object):
             self.session.commit()
             return mapping
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -894,7 +914,7 @@ class DBManager(object):
             self.session.commit()
             return mapping
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -944,7 +964,7 @@ class DBManager(object):
     """
 
     def create_objective(self, **kwargs):
-        print(kwargs)
+        # print(kwargs)
         return self.add("objective", **kwargs)
 
     def update_objective(self, objective_id, **kwargs):
@@ -1017,11 +1037,15 @@ class DBManager(object):
         return self.get("client_sid_mapping", client_sid_mapping_id)
 
     def delete_client_sid_mapping(self, sid):
-        obj = self.session.query(ClientSIDMapping).filter(
-            ClientSIDMapping.sid == sid
-        ).first()
-        self.session.delete(obj)
-        self.session.commit()
+        try:
+            obj = self.session.query(ClientSIDMapping).filter(
+                ClientSIDMapping.sid == sid
+            ).first()
+            self.session.delete(obj)
+            self.session.commit()
+        except Exception as e:
+            self.logger.error("Exception:{}".format(str(e)))
+            self.session.rollback()
 
     def find_client_sid_mapping(self, cid, sid):
         return (
@@ -1030,16 +1054,25 @@ class DBManager(object):
                 .first()
         )
 
+    # def get_client_by_sid(self, sid):
+    #     client_sid_mapping = (
+    #         self.session.query(ClientSIDMapping)
+    #         .filter(ClientSIDMapping.sid == sid)
+    #         .first()
+    #     )
+    #     if client_sid_mapping is None:
+    #         return None
+    #     else:
+    #         return self.get_client_by_cid(cid=client_sid_mapping.cid)
+
     def get_client_by_sid(self, sid):
-        client_sid_mapping = (
-            self.session.query(ClientSIDMapping)
-                .filter(ClientSIDMapping.sid == sid)
-                .first()
-        )
-        if client_sid_mapping is None:
+        try:
+            client = self.session.query(Client).filter(Client.sid == sid).first()
+            return client
+        except Exception as e:
+            self.logger.error("Exception in get_client_by_sid: {}".format(str(e)))
+            self.session.rollback()
             return None
-        else:
-            return self.get_client_by_cid(cid=client_sid_mapping.cid)
 
     def get_op_output(self, op_id):
         op = self.get_op(op_id)
@@ -1201,7 +1234,7 @@ class DBManager(object):
             self.session.delete(subgraph)
             self.session.commit()
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
 
     def update_subgraph_complexity(self, subgraph_id):
@@ -1234,7 +1267,7 @@ class DBManager(object):
             self.session.commit()
             return subgraph
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
             return None
 
@@ -1245,6 +1278,23 @@ class DBManager(object):
             self.session.commit()
             return subgraph
         except Exception as e:
-            print("Exception:{}".format(str(e)))
+            self.logger.error("Exception:{}".format(str(e)))
             self.session.rollback()
+            return None
+
+    def get_last_active_time(self, cid):
+        client = self.session.query(Client).filter(and_(Client.cid == cid, Client.role == 'contributor')).first()
+        return client.last_active_time
+
+    def get_my_graphs(self, cid):
+        """
+        Get a list of graphs created by this client
+        :param client: client object
+        :return:
+        """
+        if cid is not None:
+            graphs = self.session.query(Graph)
+            graphs = graphs.filter(Graph.owner == cid).all()
+            return graphs
+        else:
             return None
