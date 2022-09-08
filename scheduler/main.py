@@ -578,11 +578,11 @@ def run_scheduler():
 
 
 def update_client_status():
-    # g.logger.debug("Update client status")
+    g.logger.debug("Update client status")
     clients = ravdb.get_idle_connected_clients(status='connected')
     # g.logger.debug('# Connected Clients: {}'.format(len(clients)))
     for client in clients:
-        # g.logger.debug("Client:{}".format(client.cid))
+        g.logger.debug("Client:{}".format(client.cid))
         ravdb.session.refresh(client)
 
         current_time = datetime.datetime.utcnow()
@@ -600,15 +600,15 @@ def update_client_status():
 
 def disconnect_client(client):
     g.logger.debug('Disconnecting Client: {}\n'.format(client.cid))
-    g.ravdb.update_client(client, status="disconnected", reporting='ready', disconnected_at=datetime.datetime.utcnow())
-    assigned_subgraph = g.ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
+    ravdb.update_client(client, status="disconnected", reporting='ready', disconnected_at=datetime.datetime.utcnow())
+    assigned_subgraph = ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
     if assigned_subgraph is not None:
-        g.ravdb.update_subgraph(assigned_subgraph, status="ready", complexity=666)
-        subgraph_ops = g.ravdb.get_subgraph_ops(graph_id=assigned_subgraph.graph_id,
+        ravdb.update_subgraph(assigned_subgraph, status="ready", complexity=666)
+        subgraph_ops = ravdb.get_subgraph_ops(graph_id=assigned_subgraph.graph_id,
                                               subgraph_id=assigned_subgraph.subgraph_id)
         for subgraph_op in subgraph_ops:
             if subgraph_op.status != "computed":
-                g.ravdb.update_op(subgraph_op, status="pending")
+                ravdb.update_op(subgraph_op, status="pending")
 
 
 if __name__ == '__main__':
