@@ -1,5 +1,3 @@
-import datetime
-
 import ast
 import json
 import os
@@ -35,6 +33,7 @@ def retry_failed_subgraphs(graph_id):
                 failed_combination = (failed_subgraph.subgraph_id, failed_subgraph.graph_id)
                 if failed_combination not in Queue:
                     Queue.append(failed_combination)
+                    print("\nAppended to Failed Queue: ", Queue)
 
             else:
                 ravdb.update_subgraph(failed_subgraph, status='failed', complexity=6)
@@ -358,9 +357,6 @@ def run_scheduler():
     global Queue
     g.logger.debug("Scheduler started...")
     while True:
-        # Update client status
-        update_client_status()
-
         # print("Scheduler Running...")
         distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
         federated_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="federated", execute="True")
@@ -368,6 +364,7 @@ def run_scheduler():
         if len(distributed_graphs) == 0 and len(federated_graphs) == 0:
             # print("No graphs found")
             pass
+
         else:
             for federated_graph in federated_graphs:
                 created_subgraphs = ravdb.get_subgraphs_from_graph(federated_graph.id)
@@ -378,33 +375,11 @@ def run_scheduler():
                 current_graph_id = distributed_graph.id
                 ravdb.update_graph(distributed_graph, inactivity=int(distributed_graph.inactivity) + 1)
 
-                # ready_subgraphs = ravdb.get_ready_subgraphs_from_graph(graph_id=current_graph_id)
-
-                # if len(ready_subgraphs)>=1:
-                #     # dead_subgraph = ravdb.get_first_ready_subgraph_from_graph(graph_id=current_graph_id)
-                #     dead_subgraph = ready_subgraphs[0]
-                #     if dead_subgraph is not None:
-                #         ravdb.update_subgraph(dead_subgraph, optimized="False",complexity=12)
-
-                if int(distributed_graph.inactivity) >= 2000:
-                    dead_subgraph = ravdb.get_first_non_computed_subgraph(graph_id=current_graph_id)
-                    # dead_subgraph = ready_subgraphs[0]
-                    if dead_subgraph is not None:
-                        ravdb.update_subgraph(dead_subgraph, optimized="False", complexity=13)
-                        ravdb.update_graph(distributed_graph, inactivity=0)
-
-                    else:
-                        ravdb.update_graph(distributed_graph, status='failed')
-                        participating_clients = ravdb.get_assigned_clients(graph_id=current_graph_id)
-                        for client in participating_clients:
-                            ravdb.update_client(client, reporting="idle", current_subgraph_id=None,
-                                                current_graph_id=None)
-                        developers = ravdb.get_assigned_clients(graph_id=current_graph_id, role='developer')
-                        for developer in developers:
-                            ravdb.update_client(developer, status="disconnected")
-
                 dead_subgraph = ravdb.get_first_ready_subgraph_from_graph(graph_id=current_graph_id)
                 if dead_subgraph is None:
+                    vertical_split(distributed_graph.id)
+                    horizontal_split(distributed_graph.id)
+                elif dead_subgraph is not None and dead_subgraph.optimized == "False":
                     vertical_split(distributed_graph.id)
                     horizontal_split(distributed_graph.id)
 
@@ -446,8 +421,6 @@ def run_scheduler():
 
                             updated_subgraph = ravdb.update_subgraph(subgraph, op_ids=str(failed_ops), status='ready',
                                                                      optimized='True', has_failed="True", complexity=14)
-                if len(Queue) > 0:
-                    print('\nQUEUE', Queue)
 
                 subgraphs = ravdb.get_ready_subgraphs_from_graph(graph_id=current_graph_id)
 
@@ -564,6 +537,7 @@ def run_scheduler():
                         for queue_subgraph_id, queue_graph_id in Queue:
                             if queue_subgraph_id == subgraph.subgraph_id and queue_graph_id == current_graph_id:
                                 temp_Queue.remove((queue_subgraph_id, queue_graph_id))
+                                print("\nPopped from Failed Queue: ", (queue_subgraph_id, queue_graph_id))
                         Queue = temp_Queue
 
                     # Add failed and pending case
@@ -574,41 +548,7 @@ def run_scheduler():
                                                 current_graph_id=None)
                         ravdb.update_subgraph(subgraph, status="not_ready", optimized="False", complexity=19)
 
-        time.sleep(0.2)
-
-
-def update_client_status():
-    # g.logger.debug("Update client status")
-    clients = ravdb.get_idle_connected_clients(status='connected')
-    # g.logger.debug('# Connected Clients: {}'.format(len(clients)))
-    for client in clients:
-        # g.logger.debug("Client:{}".format(client.cid))
-        ravdb.session.refresh(client)
-
-        current_time = datetime.datetime.utcnow()
-        last_active_time = ravdb.get_last_active_time(client.cid)
-        if current_time > last_active_time:
-            time_difference = (current_time - last_active_time).seconds
-        else:
-            time_difference = (last_active_time - current_time).seconds
-
-        if time_difference > 30:  # To be reduced.
-            # g.logger.debug("Exceeded 30 seconds: {} - {} = {}".format(str(current_time), str(last_active_time), str(time_difference)))
-            g.logger.debug("Exceeded 30 seconds")
-            disconnect_client(client)
-
-
-def disconnect_client(client):
-    g.logger.debug('Disconnecting Client: {}\n'.format(client.cid))
-    ravdb.update_client(client, status="disconnected", reporting='ready', disconnected_at=datetime.datetime.utcnow())
-    assigned_subgraph = ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
-    if assigned_subgraph is not None:
-        ravdb.update_subgraph(assigned_subgraph, status="ready", complexity=666)
-        subgraph_ops = ravdb.get_subgraph_ops(graph_id=assigned_subgraph.graph_id,
-                                              subgraph_id=assigned_subgraph.subgraph_id)
-        for subgraph_op in subgraph_ops:
-            if subgraph_op.status != "computed":
-                ravdb.update_op(subgraph_op, status="pending")
+        time.sleep(0.1)
 
 
 if __name__ == '__main__':

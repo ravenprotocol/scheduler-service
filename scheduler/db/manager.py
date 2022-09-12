@@ -449,8 +449,7 @@ class DBManager(object):
         """
         Get assigned client by subgraph_id and graph_id
         """
-        return self.session.query(Client).filter(Client.status == 'connected').filter(
-            Client.current_graph_id == graph_id).filter(Client.current_subgraph_id == subgraph_id).first()
+        return self.session.query(Client).filter(Client.status == 'connected').filter(Client.reporting != 'broken_connection').filter(Client.current_graph_id == graph_id).filter(Client.current_subgraph_id == subgraph_id).first()
 
     def get_assigned_clients(self, subgraph_id=None, graph_id=None, role=None):
         """
@@ -460,11 +459,9 @@ class DBManager(object):
             role = 'contributor'
 
         if subgraph_id is not None:
-            return self.session.query(Client).filter(Client.status == 'connected').filter(Client.role == role).filter(
-                Client.current_graph_id == graph_id).filter(Client.current_subgraph_id == subgraph_id).all()
+            return self.session.query(Client).filter(Client.status == 'connected').filter(Client.reporting != 'broken_connection').filter(Client.role == role).filter(Client.current_graph_id == graph_id).filter(Client.current_subgraph_id == subgraph_id).all()
         else:
-            return self.session.query(Client).filter(Client.status == 'connected').filter(Client.role == role).filter(
-                Client.current_graph_id == graph_id).all()
+            return self.session.query(Client).filter(Client.status == 'connected').filter(Client.reporting != 'broken_connection').filter(Client.role == role).filter(Client.current_graph_id == graph_id).all()
 
     def get_assigned_clients_to_be_cleared(self, graph_id=None, role=None):
         """
@@ -472,8 +469,7 @@ class DBManager(object):
         """
         if role is None:
             role = 'contributor'
-        return self.session.query(Client).filter(Client.status == 'connected').filter(Client.role == role).filter(
-            Client.current_graph_id == graph_id).all()
+        return self.session.query(Client).filter(Client.status == 'connected').filter(Client.reporting != 'broken_connection').filter(Client.role == role).filter(Client.current_graph_id == graph_id).all()
 
     def get_client_by_cid(self, cid):
         """
