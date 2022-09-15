@@ -1134,6 +1134,14 @@ class DBManager(object):
 
         return self.session.query(SubGraph).filter(SubGraph.graph_id == graph_id).all()
 
+    def get_lin_op_data_ids(self, graph_id):
+        ops = self.session.query(Op).filter(and_(Op.graph_id == graph_id, Op.operator == "lin")).all()
+        data_file_paths = []
+        for op in ops:
+            data_obj = self.get_data(data_id=ast.literal_eval(op.outputs)[0])
+            data_file_paths.append(data_obj.file_path)
+        return data_file_paths
+
     def get_horizontal_split_subgraphs(self, graph_id):
         """
         Get all subgraphs belonging to a graph

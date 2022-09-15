@@ -378,10 +378,10 @@ def run_scheduler():
                 dead_subgraph = ravdb.get_first_ready_subgraph_from_graph(graph_id=current_graph_id)
                 if dead_subgraph is None:
                     vertical_split(distributed_graph.id)
-                    horizontal_split(distributed_graph.id)
+                    horizontal_split(distributed_graph.id, minimum_split_size=distributed_graph.min_split_size)
                 elif dead_subgraph is not None and dead_subgraph.optimized == "False":
                     vertical_split(distributed_graph.id)
-                    horizontal_split(distributed_graph.id)
+                    horizontal_split(distributed_graph.id, minimum_split_size=distributed_graph.min_split_size)
 
                 if_failed_subgraph = ravdb.get_if_failed_from_graph(distributed_graph.id)
                 if if_failed_subgraph is not None:
