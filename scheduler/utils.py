@@ -8,7 +8,7 @@ from .config import DATA_FILES_PATH
 
 
 def load_data_from_file(file_path, np=None):
-    print("File path:", file_path)
+    # print("File path:", file_path)
     with open(file_path, 'rb') as f:
         x = pkl.load(f)
     return np.array(x)

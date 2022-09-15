@@ -46,6 +46,8 @@ class Graph(Base):
 
     owner = Column(String(100), nullable=True)
 
+    min_split_size = Column(Integer, default=100)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
