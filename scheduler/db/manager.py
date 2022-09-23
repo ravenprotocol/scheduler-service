@@ -255,12 +255,14 @@ class DBManager(object):
         with Session.begin() as session:
             return session.query(Graph).count() + 1
 
-    def get_graph_op_dependency(self, graph_id):
+    def get_graph_op_dependency(self, graph_id, minimum_split_size=None):
         """
         Get op_dependencies of a given graph
         """
         Session = self.get_session()
         with Session.begin() as session:
+            if minimum_split_size is None:
+                minimum_split_size = MINIMUM_SPLIT_SIZE
             max_subgraph_id = len(self.get_all_subgraphs(graph_id=graph_id))
 
             # ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status == 'pending')).limit(70).offset(140).all()
@@ -270,10 +272,9 @@ class DBManager(object):
                 start_index = start_index.id
 
                 ops = session.query(Op).filter(
-                    and_(Op.id >= start_index, Op.id <= start_index + MINIMUM_SPLIT_SIZE * 2, Op.graph_id == graph_id,
-                         Op.status == 'pending')).all()
+                    and_(Op.id >= start_index, Op.id <= start_index + minimum_split_size * 2, Op.graph_id == graph_id,
+                        Op.status == 'pending')).all()
 
-                # ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status == 'pending')).limit(70).all()
                 subgraph_ops = {}
 
                 for op in ops:

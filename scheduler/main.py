@@ -122,8 +122,8 @@ def move_persisting_ops_to_developer_folder(graph_id):
         ravdb.update_data(data_obj, file_path=dst)
 
 
-def vertical_split(graph_id):
-    op_dependency = ravdb.get_graph_op_dependency(graph_id)
+def vertical_split(graph_id, minimum_split_size):
+    op_dependency = ravdb.get_graph_op_dependency(graph_id, minimum_split_size=minimum_split_size)
 
     # print('\n\nOP DEPENDENCY: ',op_dependency)
 
@@ -377,10 +377,10 @@ def run_scheduler():
 
                 dead_subgraph = ravdb.get_first_ready_subgraph_from_graph(graph_id=current_graph_id)
                 if dead_subgraph is None:
-                    vertical_split(distributed_graph.id)
+                    vertical_split(distributed_graph.id, minimum_split_size=distributed_graph.min_split_size)
                     horizontal_split(distributed_graph.id, minimum_split_size=distributed_graph.min_split_size)
                 elif dead_subgraph is not None and dead_subgraph.optimized == "False":
-                    vertical_split(distributed_graph.id)
+                    vertical_split(distributed_graph.id, minimum_split_size=distributed_graph.min_split_size)
                     horizontal_split(distributed_graph.id, minimum_split_size=distributed_graph.min_split_size)
 
                 if_failed_subgraph = ravdb.get_if_failed_from_graph(distributed_graph.id)
