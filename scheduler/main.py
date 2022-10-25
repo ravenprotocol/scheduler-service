@@ -516,6 +516,7 @@ def run_scheduler():
                             break
 
                     if not ready_flag:
+                        g.logger.debug("Cyclic Dependency for Subgraph ID: {} Graph ID: {}".format(subgraph.subgraph_id, subgraph.graph_id))
                         continue
 
                     idle_clients = ravdb.get_idle_clients(
@@ -555,6 +556,7 @@ def run_scheduler():
                                     client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
                                     current_graph_id=subgraph.graph_id,
                                 )
+                                g.logger.debug("Assigned Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
 
                         # else:
                         # print('\n\nNo idle clients')
