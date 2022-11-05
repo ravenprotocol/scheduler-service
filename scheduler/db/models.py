@@ -222,6 +222,7 @@ class GraphClientMapping(Base):
 class SubgraphClientMapping(Base):
     __tablename__ = 'subgraph_client_mapping'
     id = Column(Integer, primary_key=True)
+    graph_id = Column(Integer, ForeignKey('graph.id'))
     subgraph_id = Column(Integer, ForeignKey('sub_graph.id'))
     client_id = Column(Integer, ForeignKey('client.id'))
     sent_time = Column(DateTime, default=None)

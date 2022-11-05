@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime
+
 import ast
 import json
 import networkx as nx
@@ -558,6 +560,9 @@ def run_scheduler():
                                 )
                                 g.logger.debug("Assigned Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
 
+                                ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
+                                                                     subgraph_id=subgraph.subgraph_id)
+
                         # else:
                         # print('\n\nNo idle clients')
                         # print('')
@@ -637,7 +642,42 @@ def run_scheduler():
                         ravdb.update_subgraph(
                             subgraph, status='not_ready', optimized='False', complexity=19)
 
+                # Check for sub_graphs and their status
+                subgraph_client_mappings_computing = ravdb.find_subgraph_client_mappings(graph_id=distributed_graph.id, status="computing")
+
+                for mapping in subgraph_client_mappings_computing:
+                    subgraph = ravdb.get_subgraph(subgraph_id=mapping.subgraph_id, graph_id=mapping.graph_id)
+                    if (datetime.datetime.utcnow() - mapping.sent_time).seconds > subgraph.complexity * 4 * 60:
+                        g.logger.debug("Clear mapping")
+                        clear_assigned_subgraphs(mapping)
+                    else:
+                        g.logger.debug("active:{}".format(mapping.id))
+
         time.sleep(0.1)
+
+
+def clear_assigned_subgraphs(mapping):
+    """
+    Clear assigned subgraphs
+    """
+    # 1. Update subgraph_client_mapping
+    ravdb.update_subgraph_client_mapping(mapping.id, status="failed")
+
+    # 2. Update subgraph status
+    subgraph = ravdb.get_subgraph(subgraph_id=mapping.subgraph_id, graph_id=mapping.graph_id)
+    ravdb.update_subgraph(subgraph, status=SubgraphStatus.READY, optimized="False")
+
+    # 3. Update op statuses
+    op_ids = ast.literal_eval(subgraph.op_ids)
+    for op_id in op_ids:
+        op = ravdb.get_op(op_id)
+        if op.status != "computed":
+            ravdb.update_op(op, status=OpStatus.PENDING, subgraph_id=subgraph.subgraph_id)
+
+    # 4. Update client status
+    client_id = mapping.client_id
+    client = ravdb.get_client(client_id)
+    ravdb.update_client(client, reporting="broken_connection", current_subgraph_id=None, current_graph_id=None)
 
 
 if __name__ == '__main__':

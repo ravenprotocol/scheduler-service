@@ -918,17 +918,44 @@ class DBManager:
             session.add(mapping)
             return mapping
 
-    def find_subgraph_client_mapping(self, subgraph_id, client_id):
+    def find_subgraph_client_mapping(self, graph_id, subgraph_id, client_id):
         Session = self.get_session()
         with Session.begin() as session:
             mapping = (
                 session.query(SubgraphClientMapping)
                     .filter(
                     SubgraphClientMapping.client_id == client_id,
+                    SubgraphClientMapping.graph_id == graph_id,
                     SubgraphClientMapping.subgraph_id == subgraph_id,
                 ).first()
             )
             return mapping
+
+    def find_subgraph_client_mappings(self, graph_id=None, subgraph_id=None, client_id=None, status=None):
+        """
+        Get all subgraph client mappings
+        :param graph_id: graph id
+        :param subgraph_id: subgraph id
+        :param client_id: client id
+        :param status: status
+        :return: mappings
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+
+            if graph_id is not None:
+                mappings = session.query(SubgraphClientMapping).filter(SubgraphClientMapping.graph_id==graph_id)
+
+            if subgraph_id is not None:
+                mappings = mappings.filter(SubgraphClientMapping.subgraph_id == subgraph_id)
+
+            if client_id is not None:
+                mappings = mappings.filter(SubgraphClientMapping.client_id == client_id)
+
+            if status is not None:
+                mappings = mappings.filter(SubgraphClientMapping.status == status)
+
+            return mappings.all()
 
     def get_subgraph_client_mappings(self, subgraph_id=None, client_id=None, status=None):
         if subgraph_id is None and client_id is None:
@@ -1243,6 +1270,23 @@ class DBManager:
                     SubGraph.status == 'assigned',
                 ),
             ).all()
+
+    def get_subgraphs(self, graph_id=None, status=None):
+        """
+        Find subgraphs
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+            if status is not None and graph_id is not None:
+                return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
+                        SubGraph.status == status
+                ).all()
+            elif graph_id is not None:
+                return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).all()
+            elif status is not None:
+                return session.query(SubGraph).filter(
+                    SubGraph.status == status
+                ).all()
 
     def get_if_failed_from_graph(self, graph_id):
         Session = self.get_session()
