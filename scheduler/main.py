@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import datetime
 
 import ast
@@ -402,6 +401,9 @@ def run_scheduler():
     global Queue
     g.logger.debug('Scheduler started...')
     while True:
+        # Update client status
+        update_client_status()
+
         # print("Scheduler Running...")
         distributed_graphs = ravdb.get_graphs(
             status=GraphStatus.PENDING, approach='distributed', execute='True')
@@ -656,6 +658,38 @@ def run_scheduler():
         time.sleep(0.1)
 
 
+def update_client_status():
+    clients = ravdb.get_idle_connected_clients(status='connected')
+    g.logger.debug('# Connected Clients: {}'.format(len(clients)))
+    for client in clients:
+        g.logger.debug("Client:{}".format(client.cid))
+        ravdb.session.refresh(client)
+
+        current_time = datetime.datetime.utcnow()
+        last_active_time = ravdb.get_last_active_time(client.cid)
+        if current_time > last_active_time:
+            time_difference = (current_time - last_active_time).seconds
+        else:
+            time_difference = (last_active_time - current_time).seconds
+
+        if time_difference > 30:  # To be reduced.
+            # g.logger.debug("Exceeded 30 seconds: {} - {} = {}".format(str(current_time), str(last_active_time), str(time_difference)))
+            g.logger.debug("Exceeded 30 seconds")
+            disconnect_client(client)
+
+
+def disconnect_client(client):
+    g.logger.debug('Disconnecting Client: {}\n'.format(client.cid))
+    g.ravdb.update_client(client, status="disconnected", reporting='ready', disconnected_at=datetime.datetime.utcnow())
+    assigned_subgraph = g.ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
+    if assigned_subgraph is not None:
+        g.ravdb.update_subgraph(assigned_subgraph, status="ready", complexity=666)
+        subgraph_ops = g.ravdb.get_subgraph_ops(graph_id=assigned_subgraph.graph_id,
+                                              subgraph_id=assigned_subgraph.subgraph_id)
+        for subgraph_op in subgraph_ops:
+            if subgraph_op.status != "computed":
+                g.ravdb.update_op(subgraph_op, status="pending")
+                
 def clear_assigned_subgraphs(mapping):
     """
     Clear assigned subgraphs
