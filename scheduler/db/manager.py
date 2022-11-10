@@ -1180,6 +1180,21 @@ class DBManager:
 
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).all()
 
+    def get_last_10_computed_subgraphs(self, graph_id):
+        """
+        Get last 10 computed subgraphs belonging to a graph
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+            last_element = session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(SubGraph.status == 'computed').order_by(
+                SubGraph.id.desc()).first()
+            if last_element is not None:
+                if last_element.id > 10:
+                    return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(SubGraph.status == 'computed').order_by(
+                        SubGraph.id.desc()).limit(10)[::-1]
+
+            return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(SubGraph.status == 'computed').all()
+
     def get_lin_op_data_ids(self, graph_id):
         Session = self.get_session()
         with Session.begin() as session:

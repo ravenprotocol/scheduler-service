@@ -400,16 +400,17 @@ def create_sub_graphs(graph_id):
 def run_scheduler():
     global Queue
     g.logger.debug('Scheduler started...')
+    c = 0
     while True:
         # Update client status
-        update_client_status()
-
-        # print("Scheduler Running...")
+        if c % 10 == 0:
+            update_client_status()
+            c = 0
         distributed_graphs = ravdb.get_graphs(
             status=GraphStatus.PENDING, approach='distributed', execute='True')
         federated_graphs = ravdb.get_graphs(
             status=GraphStatus.PENDING, approach='federated', execute='True')
-        # g.logger.debug("Graphs: {} {}".format(len(distributed_graphs), len(federated_graphs)))
+        
         if len(distributed_graphs) == 0 and len(federated_graphs) == 0:
             # print("No graphs found")
             pass
@@ -494,6 +495,9 @@ def run_scheduler():
                     op_ids = ast.literal_eval(subgraph.op_ids)
                     for op_id in op_ids:
                         op = ravdb.get_op(op_id)
+                        if op.status == "computing":
+                            ready_flag = False
+                            break
                         if op.inputs != 'null':
                             for input_op_id in ast.literal_eval(op.inputs):
                                 input_op = ravdb.get_op(input_op_id)
@@ -572,77 +576,17 @@ def run_scheduler():
                     # print('\nNo idle clients')
                     # print('')
 
-                subgraphs = ravdb.get_last_10_subgraphs(
-                    graph_id=current_graph_id)
+                subgraphs = ravdb.get_last_10_computed_subgraphs(graph_id=current_graph_id)
                 if len(subgraphs) > 10:
                     subgraphs = subgraphs[-10:]
                 for subgraph in subgraphs:
-                    subgraph_op_ids = ast.literal_eval(subgraph.op_ids)
-                    actual_op_ids = []
-                    for op_id in subgraph_op_ids:
-                        op = ravdb.get_op(op_id)
-                        if op.subgraph_id == subgraph.subgraph_id:
-                            actual_op_ids.append(op)
-
-                    num_ops = len(actual_op_ids)
-                    counter = {'pending': 0, 'computed': 0,
-                               'failed': 0, 'computing': 0}
-                    for subgraph_op in actual_op_ids:
-                        if subgraph_op.status == 'pending':
-                            counter['pending'] += 1
-                        elif subgraph_op.status == 'computed':
-                            counter['computed'] += 1
-                        elif subgraph_op.status == 'failed':
-                            counter['failed'] += 1
-                        elif subgraph_op.status == 'computing':
-                            counter['computing'] += 1
-
-                    if subgraph.status != 'computed':
-                        if counter['computed'] == num_ops:
-                            ravdb.update_subgraph(
-                                subgraph, status='computed', complexity=16)
-                            assigned_client = ravdb.get_assigned_client(
-                                subgraph.subgraph_id, subgraph.graph_id)
-                            if assigned_client is not None:
-                                ravdb.update_client(
-                                    assigned_client, reporting='idle', current_subgraph_id=None,
-                                    current_graph_id=None,
-                                )
-
-                        elif counter['pending'] == 0 and counter['computing'] == 0 and counter['failed'] == 0 and \
-                                counter['computed'] == 0:
-                            ravdb.update_subgraph(
-                                subgraph, status='computed', complexity=17)
-                            assigned_client = ravdb.get_assigned_client(
-                                subgraph.subgraph_id, subgraph.graph_id)
-                            if assigned_client is not None:
-                                ravdb.update_client(
-                                    assigned_client, reporting='idle', current_subgraph_id=None,
-                                    current_graph_id=None,
-                                )
-
-                    # and int(subgraph.retry_attempts) >= 2:
-                    elif subgraph.status == 'computed' and subgraph.has_failed == 'True':
+                    if subgraph.has_failed == "True":
                         temp_Queue = Queue
                         for queue_subgraph_id, queue_graph_id in Queue:
                             if queue_subgraph_id == subgraph.subgraph_id and queue_graph_id == current_graph_id:
-                                temp_Queue.remove(
-                                    (queue_subgraph_id, queue_graph_id))
-                                print('\nPopped from Failed Queue: ',
-                                      (queue_subgraph_id, queue_graph_id))
+                                temp_Queue.remove((queue_subgraph_id, queue_graph_id))
+                                print("\nPopped from Failed Queue: ", (queue_subgraph_id, queue_graph_id))
                         Queue = temp_Queue
-
-                    # Add failed and pending case
-                    if subgraph.status == 'failed' and counter['pending'] > 0:
-                        assigned_client = ravdb.get_assigned_client(
-                            subgraph.subgraph_id, subgraph.graph_id)
-                        if assigned_client is not None:
-                            ravdb.update_client(
-                                assigned_client, reporting='idle', current_subgraph_id=None,
-                                current_graph_id=None,
-                            )
-                        ravdb.update_subgraph(
-                            subgraph, status='not_ready', optimized='False', complexity=19)
 
                 # Check for sub_graphs and their status
                 subgraph_client_mappings_computing = ravdb.find_subgraph_client_mappings(graph_id=distributed_graph.id, status="computing")
@@ -656,6 +600,7 @@ def run_scheduler():
                         g.logger.debug("active:{}".format(mapping.id))
 
         time.sleep(0.1)
+        c += 1
 
 
 def update_client_status():
@@ -684,13 +629,32 @@ def disconnect_client(client):
     ravdb.update_client(client, status="disconnected", reporting='ready', disconnected_at=datetime.datetime.utcnow())
     assigned_subgraph = ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
     if assigned_subgraph is not None:
-        ravdb.update_subgraph(assigned_subgraph, status="ready", complexity=666)
-        subgraph_ops = ravdb.get_subgraph_ops(graph_id=assigned_subgraph.graph_id,
-                                              subgraph_id=assigned_subgraph.subgraph_id)
-        for subgraph_op in subgraph_ops:
-            if subgraph_op.status != "computed":
-                ravdb.update_op(subgraph_op, status="pending")
+        if assigned_subgraph.retry_attempts > 0:
+            ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", retry_attempts=assigned_subgraph.retry_attempts - 1, complexity=666)
+        else:
+            ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", complexity=666)
 
+        current_subgraph_id = client.current_subgraph_id
+        current_graph_id = client.current_graph_id
+        ravdb.update_client(client, current_subgraph_id=None, current_graph_id=None)
+
+        zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/zip_{}_{}.zip'.format(
+            current_subgraph_id,
+            current_graph_id,
+        )
+
+        if os.path.exists(zip_file_path):
+            print('\n\n\n Deleted in disconnect: ', zip_file_path)
+            os.remove(zip_file_path)
+
+        local_zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/local_{}_{}.zip'.format(
+            current_subgraph_id,
+            current_graph_id,
+        )
+
+        if os.path.exists(local_zip_file_path):
+            print('\n\n\n Deleted in disconnect: ', local_zip_file_path)
+            os.remove(local_zip_file_path)
 
 def clear_assigned_subgraphs(mapping):
     """
