@@ -630,9 +630,9 @@ def disconnect_client(client):
     assigned_subgraph = ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
     if assigned_subgraph is not None:
         if assigned_subgraph.retry_attempts > 0:
-            ravdb.update_subgraph(assigned_subgraph, status="failed", retry_attempts=assigned_subgraph.retry_attempts - 1, complexity=666)
+            ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", retry_attempts=assigned_subgraph.retry_attempts - 1, complexity=666)
         else:
-            ravdb.update_subgraph(assigned_subgraph, status="failed", complexity=666)
+            ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", complexity=666)
 
         current_subgraph_id = client.current_subgraph_id
         current_graph_id = client.current_graph_id
