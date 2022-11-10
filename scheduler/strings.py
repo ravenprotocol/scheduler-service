@@ -104,6 +104,7 @@ class Operators:
 
     # Data Preprocessing
     ONE_HOT_ENCODING = 'one_hot_encoding'
+    GET_LAYER_RESULTS='get_layer_result'
 
     SET_VALUE = 'set_value'
 
@@ -195,6 +196,8 @@ functions = {
     'cnn_index_2': Operators.CNN_INDEX_2,
     'cnn_add_at': Operators.CNN_ADD_AT,
     'size': Operators.SIZE,
+    'get_layer_result':Operators.GET_LAYER_RESULTS,
+    
 }
 
 
