@@ -659,12 +659,12 @@ def run_scheduler():
 
 
 def update_client_status():
-    g.logger.debug("Update client status")
+    # g.logger.debug("Update client status")
     clients = ravdb.get_idle_connected_clients(status='connected')
     # g.logger.debug('# Connected Clients: {}'.format(len(clients)))
     for client in clients:
-        g.logger.debug("Client:{}".format(client.cid))
-        ravdb.session.refresh(client)
+        # g.logger.debug("Client:{}".format(client.cid))
+        # ravdb.session.refresh(client)
 
         current_time = datetime.datetime.utcnow()
         last_active_time = ravdb.get_last_active_time(client.cid)
