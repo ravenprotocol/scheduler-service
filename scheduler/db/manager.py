@@ -358,7 +358,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(Op).filter(
-                and_(Op.graph_id == graph_id, Op.status == 'computed', Op.dependents is None),
+                and_(Op.graph_id == graph_id, Op.status == 'computed', Op.dependents == None),
             ).all()
 
     def get_graph_ops(self, graph_id):

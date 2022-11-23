@@ -10,3 +10,4 @@ PROJECT_DIR = pathlib.Path(__file__).parent.parent.resolve()
 LOG_FILE_PATH = os.path.join(PROJECT_DIR, 'debug.log')
 RAVENVERSE_DATABASE_URI = os.environ.get('RAVENVERSE_DATABASE_URI')
 DATA_FILES_PATH = os.path.join(PROJECT_DIR, 'files')
+RAVSOCK_COMM_URL = 'http://localhost:8081'
