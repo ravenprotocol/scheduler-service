@@ -1,37 +1,34 @@
-from __future__ import annotations
-
 import ast
 import json
 import numpy as np
 import sqlalchemy as db
-from sqlalchemy import and_
-from sqlalchemy import or_
+from sqlalchemy import or_, and_, not_
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy_utils import create_database as cd
-from sqlalchemy_utils import database_exists
-from sqlalchemy_utils import drop_database as dba
+from sqlalchemy_utils import (
+    database_exists,
+    create_database as cd,
+    drop_database as dba,
+)
 
-from .models import Base
-from .models import Client
-from .models import ClientOpMapping
-from .models import ClientSIDMapping
-from .models import Data
-from .models import Graph
-from .models import GraphClientMapping
-from .models import Objective
-from .models import ObjectiveClientMapping
-from .models import Op
-from .models import SubGraph
-from .models import SubgraphClientMapping
-from ..config import MINIMUM_SPLIT_SIZE
-from ..config import RAVENVERSE_DATABASE_URI
+from .models import (
+    Op,
+    Graph,
+    SubGraph,
+    ClientOpMapping,
+    Client,
+    Data,
+    Base,
+    GraphClientMapping,
+    Objective,
+    ObjectiveClientMapping,
+    ClientSIDMapping,
+    SubgraphClientMapping)
+from ..config import RAVENVERSE_DATABASE_URI, MINIMUM_SPLIT_SIZE
 from ..strings import MappingStatus, OpStatus
-from ..utils import delete_data_file
-from ..utils import load_data_from_file
-from ..utils import save_data_to_file
+from ..utils import delete_data_file, save_data_to_file, load_data_from_file
 
 
-class DBManager:
+class DBManager(object):
     def __init__(self):
         self.create_database()
         self.engine = self.connect()
@@ -42,19 +39,19 @@ class DBManager:
 
     def connect(self):
         # print("Database uri:", RAVENVERSE_DATABASE_URI)
-        engine = db.create_engine(RAVENVERSE_DATABASE_URI, isolation_level='READ UNCOMMITTED')
+        engine = db.create_engine(RAVENVERSE_DATABASE_URI, isolation_level="READ UNCOMMITTED")
         Base.metadata.bind = engine
         return engine
 
     def create_database(self):
         if not database_exists(RAVENVERSE_DATABASE_URI):
             cd(RAVENVERSE_DATABASE_URI)
-            print('Database created')
+            print("Database created")
 
     def drop_database(self):
         if database_exists(RAVENVERSE_DATABASE_URI):
             dba(RAVENVERSE_DATABASE_URI)
-            print('Database dropped')
+            print("Database dropped")
 
     def get_session(self):
         Session = sessionmaker(bind=self.engine, expire_on_commit=False)
@@ -82,19 +79,19 @@ class DBManager:
     def get(self, name, id):
         Session = self.get_session()
         with Session.begin() as session:
-            if name == 'op':
+            if name == "op":
                 obj = session.query(Op).get(id)
-            elif name == 'data':
+            elif name == "data":
                 obj = session.query(Data).get(id)
-            elif name == 'graph':
+            elif name == "graph":
                 obj = session.query(Graph).get(id)
-            elif name == 'client':
+            elif name == "client":
                 obj = session.query(Client).get(id)
-            elif name == 'objective':
+            elif name == "objective":
                 obj = session.query(Objective).get(id)
-            elif name == 'objective_client_mapping':
+            elif name == "objective_client_mapping":
                 obj = session.query(ObjectiveClientMapping).get(id)
-            elif name == 'client_sid_mapping':
+            elif name == "client_sid_mapping":
                 obj = session.query(ClientSIDMapping).get(id)
             else:
                 obj = None
@@ -104,19 +101,19 @@ class DBManager:
     def add(self, n, **kwargs):
         Session = self.get_session()
         with Session.begin() as session:
-            if n == 'op':
+            if n == "op":
                 obj = Op()
-            elif n == 'data':
+            elif n == "data":
                 obj = Data()
-            elif n == 'graph':
+            elif n == "graph":
                 obj = Graph()
-            elif n == 'client':
+            elif n == "client":
                 obj = Client()
-            elif n == 'objective':
+            elif n == "objective":
                 obj = Objective()
-            elif n == 'objective_client_mapping':
+            elif n == "objective_client_mapping":
                 obj = ObjectiveClientMapping()
-            elif n == 'client_sid_mapping':
+            elif n == "client_sid_mapping":
                 obj = ClientSIDMapping()
             else:
                 obj = None
@@ -130,19 +127,19 @@ class DBManager:
     def update(self, n, id, **kwargs):
         Session = self.get_session()
         with Session.begin() as session:
-            if n == 'op':
+            if n == "op":
                 obj = session.query(Op).get(id)
-            elif n == 'data':
+            elif n == "data":
                 obj = session.query(Data).get(id)
-            elif n == 'graph':
+            elif n == "graph":
                 obj = session.query(Graph).get(id)
-            elif n == 'client':
+            elif n == "client":
                 obj = session.query(Client).get(id)
-            elif n == 'objective':
+            elif n == "objective":
                 obj = session.query(Objective).get(id)
-            elif n == 'objective_client_mapping':
+            elif n == "objective_client_mapping":
                 obj = session.query(ObjectiveClientMapping).get(id)
-            elif n == 'client_sid_mapping':
+            elif n == "client_sid_mapping":
                 obj = session.query(ClientSIDMapping).get(id)
             else:
                 obj = None
@@ -262,8 +259,14 @@ class DBManager:
         """
         Get op_dependencies of a given graph
         """
+
+        graph = self.get_graph(graph_id)
+        if graph.computation_mode == "backward":
+            return {}
+
         Session = self.get_session()
         with Session.begin() as session:
+
             if minimum_split_size is None:
                 minimum_split_size = MINIMUM_SPLIT_SIZE
             max_subgraph_id = len(self.get_all_subgraphs(graph_id=graph_id))
@@ -271,13 +274,35 @@ class DBManager:
             # ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status == 'pending')).limit(70).offset(140).all()
             start_index = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status == 'pending')).first()
 
+            stop_backward_marker = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status != 'computed', Op.operator == 'stop_backward_marker')).first()
+
             if start_index is not None:
                 start_index = start_index.id
 
                 ops = session.query(Op).filter(
-                    and_(Op.id >= start_index, Op.id <= start_index + minimum_split_size * 2, Op.graph_id == graph_id,
-                         Op.status == 'pending')).all()
+                        and_(Op.id >= start_index, 
+                        Op.id <= start_index + minimum_split_size * 2, 
+                        Op.graph_id == graph_id, Op.status == 'pending', 
+                        not_(Op.operator.contains("backward_pass_")),
+                        not_(Op.operator.contains("stop_backward_marker"))
+                        )).all()
 
+                last_op = ops[-1]
+                if 'start_backward_marker' not in last_op.operator:
+                    next_start_backward_marker = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.id > last_op.id,
+                                                    Op.status != 'computed', Op.operator == 'start_backward_marker')).first()
+                    if next_start_backward_marker is not None:
+                        next_ops = session.query(Op).filter(
+                            and_(Op.id <= next_start_backward_marker.id, 
+                            Op.id > last_op.id, 
+                            Op.graph_id == graph_id, Op.status == 'pending', 
+                            not_(Op.operator.contains("backward_pass_")),
+                            not_(Op.operator.contains("stop_backward_marker"))
+                            )).all()
+
+                        ops.extend(next_ops)
+
+            
                 subgraph_ops = {}
 
                 for op in ops:
@@ -313,8 +338,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(Op).filter(
-                and_(Op.graph_id == graph_id, Op.subgraph_id == 0, Op.dependents is None),
-            ).all()
+                and_(Op.graph_id == graph_id, Op.subgraph_id == 0, Op.dependents == None)).all()
 
     def get_graph(self, graph_id):
         """
@@ -358,8 +382,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(Op).filter(
-                and_(Op.graph_id == graph_id, Op.status == 'computed', Op.dependents is None),
-            ).all()
+                and_(Op.graph_id == graph_id, Op.status == 'computed', Op.dependents == None)).all()
 
     def get_graph_ops(self, graph_id):
         Session = self.get_session()
@@ -372,7 +395,7 @@ class DBManager:
             return session.query(Op).filter(and_(Op.graph_id == graph_id, Op.name == op_name)).first()
 
     def delete_graph_ops(self, graph_id):
-        self.logger.debug('Deleting graph ops...')
+        self.logger.debug("Deleting graph ops...")
         ops = self.get_graph_ops(graph_id=graph_id)
 
         for op in ops:
@@ -420,8 +443,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(Client).filter(
-                and_(Client.current_graph_id == graph_id, Client.role == 'developer'),
-            ).first()
+                and_(Client.current_graph_id == graph_id, Client.role == 'developer')).first()
 
     def get_client_from_token(self, token):
         """
@@ -438,10 +460,8 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(Client).filter(Client.status == 'connected').filter(
-                Client.reporting != 'broken_connection',
-            ).filter(Client.current_graph_id == graph_id).filter(
-                Client.current_subgraph_id == subgraph_id,
-            ).first()
+                Client.reporting != 'broken_connection').filter(Client.current_graph_id == graph_id).filter(
+                Client.current_subgraph_id == subgraph_id).first()
 
     def get_assigned_clients(self, subgraph_id=None, graph_id=None, role=None):
         """
@@ -453,16 +473,12 @@ class DBManager:
         with Session.begin() as session:
             if subgraph_id is not None:
                 return session.query(Client).filter(Client.status == 'connected').filter(
-                    Client.reporting != 'broken_connection',
-                ).filter(Client.role == role).filter(
-                    Client.current_graph_id == graph_id,
-                ).filter(Client.current_subgraph_id == subgraph_id).all()
+                    Client.reporting != 'broken_connection').filter(Client.role == role).filter(
+                    Client.current_graph_id == graph_id).filter(Client.current_subgraph_id == subgraph_id).all()
             else:
                 return session.query(Client).filter(Client.status == 'connected').filter(
-                    Client.reporting != 'broken_connection',
-                ).filter(Client.role == role).filter(
-                    Client.current_graph_id == graph_id,
-                ).all()
+                    Client.reporting != 'broken_connection').filter(Client.role == role).filter(
+                    Client.current_graph_id == graph_id).all()
 
     def get_assigned_clients_to_be_cleared(self, graph_id=None, role=None):
         """
@@ -473,10 +489,8 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(Client).filter(Client.status == 'connected').filter(
-                Client.reporting != 'broken_connection',
-            ).filter(Client.role == role).filter(
-                Client.current_graph_id == graph_id,
-            ).all()
+                Client.reporting != 'broken_connection').filter(Client.role == role).filter(
+                Client.current_graph_id == graph_id).all()
 
     def get_client_by_cid(self, cid):
         """
@@ -507,11 +521,8 @@ class DBManager:
             Session = self.get_session()
             with Session.begin() as session:
                 return session.query(Graph).filter(
-                    and_(
-                        Graph.status == 'pending', Graph.approach == approach, Graph.execute == 'True',
-                        Graph.compiled == 'True',
-                    ),
-                ).order_by(Graph.created_at.desc()).all()
+                    and_(Graph.status == "pending", Graph.approach == approach, Graph.execute == "True",
+                         Graph.compiled == "True")).order_by(Graph.created_at.desc()).all()
 
     def get_all_ops(self):
         Session = self.get_session()
@@ -533,14 +544,14 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             for client in session.query(Client).all():
-                client.status = 'disconnected'
+                client.status = "disconnected"
                 session.add(client)
 
     def disconnect_client(self, client_id):
         Session = self.get_session()
         with Session.begin() as session:
             client = self.get_client(client_id=client_id)
-            client.status = 'disconnected'
+            client.status = "disconnected"
             session.add(client)
 
     def get_ops_by_name(self, op_name, graph_id=None):
@@ -564,31 +575,31 @@ class DBManager:
 
             for input_op in inputs:
                 input_op1 = self.get_op(op_id=input_op)
-                if input_op1.status in ['pending', 'computing']:
-                    return 'parent_op_not_ready'
-                elif input_op1.status == 'failed':
-                    return 'parent_op_failed'
-                elif input_op1.status == 'computed':
+                if input_op1.status in ["pending", "computing"]:
+                    return "parent_op_not_ready"
+                elif input_op1.status == "failed":
+                    return "parent_op_failed"
+                elif input_op1.status == "computed":
                     cs += 1
 
             for index, value in params.items():
-                if type(value).__name__ == 'int':
+                if type(value).__name__ == "int":
                     cop = self.get_op(op_id=value)
-                    if cop.status in ['pending', 'computing']:
-                        return 'parent_op_not_ready'
-                    elif cop.status == 'failed':
-                        return 'parent_op_failed'
-                    elif cop.status == 'computed':
+                    if cop.status in ["pending", "computing"]:
+                        return "parent_op_not_ready"
+                    elif cop.status == "failed":
+                        return "parent_op_failed"
+                    elif cop.status == "computed":
                         cs += 1
                 else:
                     cs += 1
 
             if cs == len(inputs) + len(params.keys()):
-                return 'ready'
+                return "ready"
             else:
-                return 'not_ready'
+                return "not_ready"
 
-        return 'ready'
+        return "ready"
 
     def get_ops_without_graph(self, status=None):
         """
@@ -606,7 +617,7 @@ class DBManager:
             else:
                 return session.query(Op).filter(Op.graph_id is None).all()
 
-    def get_graphs(self, status=None, approach=None, execute=None):
+    def get_graphs(self, status=None, approach=None, execute=None, computation_mode=None):
         """
         Get a list of graphs
         """
@@ -621,6 +632,9 @@ class DBManager:
 
             if execute is not None:
                 graphs = graphs.filter(Graph.execute == execute)
+
+            if computation_mode is not None:
+                graphs = graphs.filter(Graph.computation_mode == computation_mode)
 
             return graphs.all()
 
@@ -643,12 +657,10 @@ class DBManager:
         with Session.begin() as session:
             if status is not None:
                 return session.query(Client).filter(Client.role == 'contributor').filter(
-                    or_(Client.reporting == 'idle', Client.reporting == 'busy'),
-                ).filter(Client.status == status).all()
+                    or_(Client.reporting == 'idle', Client.reporting == 'busy')).filter(Client.status == status).all()
             else:
                 return session.query(Client).filter(Client.role == 'contributor').filter(
-                    or_(Client.reporting == 'idle', Client.reporting == 'busy'),
-                ).all()
+                    or_(Client.reporting == 'idle', Client.reporting == 'busy')).all()
 
     def get_idle_clients(self, reporting=None):
         """
@@ -658,12 +670,10 @@ class DBManager:
         with Session.begin() as session:
             if reporting is not None:
                 return session.query(Client).filter(Client.role == 'contributor').filter(
-                    Client.status == 'connected',
-                ).filter(Client.reporting == reporting).all()
+                    Client.status == 'connected').filter(Client.reporting == reporting).all()
             else:
                 return session.query(Client).filter(Client.role == 'contributor').filter(
-                    Client.status == 'connected',
-                ).all()
+                    Client.status == 'connected').all()
 
     def get_available_clients(self):
         """
@@ -672,8 +682,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             clients = session.query(Client).filter(Client.role == 'contributor').filter(
-                Client.status == 'connected',
-            ).all()
+                Client.status == "connected").all()
 
             client_list = []
             for client in clients:
@@ -682,7 +691,7 @@ class DBManager:
                         ClientOpMapping.status == MappingStatus.SENT,
                         ClientOpMapping.status == MappingStatus.ACKNOWLEDGED,
                         ClientOpMapping.status == MappingStatus.COMPUTING,
-                    ),
+                    )
                 )
                 if client_ops.count() == 0:
                     client_list.append(client)
@@ -760,7 +769,7 @@ class DBManager:
             mapping = (
                 session.query(ClientOpMapping)
                     .filter(
-                    ClientOpMapping.client_id == client_id, ClientOpMapping.op_id == op_id,
+                    ClientOpMapping.client_id == client_id, ClientOpMapping.op_id == op_id
                 )
                     .first()
             )
@@ -777,15 +786,15 @@ class DBManager:
                         op_mappings.filter(ClientOpMapping.status == MappingStatus.SENT).count()
                         >= 3
                         or op_mappings.filter(
-                    ClientOpMapping.status == MappingStatus.COMPUTING,
+                    ClientOpMapping.status == MappingStatus.COMPUTING
                 ).count()
                         >= 2
                         or op_mappings.filter(
-                    ClientOpMapping.status == MappingStatus.REJECTED,
+                    ClientOpMapping.status == MappingStatus.REJECTED
                 ).count()
                         >= 5
                         or op_mappings.filter(
-                    ClientOpMapping.status == MappingStatus.FAILED,
+                    ClientOpMapping.status == MappingStatus.FAILED
                 ).count()
                         >= 3
                 ):
@@ -801,9 +810,9 @@ class DBManager:
                 op_mappings.filter(ClientOpMapping.status == MappingStatus.FAILED).count()
                 >= 3
         ):
-            return 'failed'
+            return "failed"
 
-        return 'computing'
+        return "computing"
 
     def get_first_graph_op(self, graph_id):
         """
@@ -830,8 +839,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             clients = session.query(Client).filter(Client.role == 'contributor').filter(
-                Client.status == 'connected',
-            ).all()
+                Client.status == "connected").all()
             clients_sids = [client.client_id for client in clients]
             return clients, clients_sids
 
@@ -840,8 +848,8 @@ class DBManager:
         with Session.begin() as session:
             ops = (
                 session.query(Op)
-                    .filter(Op.operator == 'federated_training')
-                    .filter(Op.id == kwargs.get('id'))
+                    .filter(Op.operator == "federated_training")
+                    .filter(Op.id == kwargs.get("id"))
                     .all()
             )
             # print(ops)
@@ -931,32 +939,6 @@ class DBManager:
             )
             return mapping
 
-    def find_subgraph_client_mappings(self, graph_id=None, subgraph_id=None, client_id=None, status=None):
-        """
-        Get all subgraph client mappings
-        :param graph_id: graph id
-        :param subgraph_id: subgraph id
-        :param client_id: client id
-        :param status: status
-        :return: mappings
-        """
-        Session = self.get_session()
-        with Session.begin() as session:
-
-            if graph_id is not None:
-                mappings = session.query(SubgraphClientMapping).filter(SubgraphClientMapping.graph_id==graph_id)
-
-            if subgraph_id is not None:
-                mappings = mappings.filter(SubgraphClientMapping.subgraph_id == subgraph_id)
-
-            if client_id is not None:
-                mappings = mappings.filter(SubgraphClientMapping.client_id == client_id)
-
-            if status is not None:
-                mappings = mappings.filter(SubgraphClientMapping.status == status)
-
-            return mappings.all()
-
     def get_subgraph_client_mappings(self, subgraph_id=None, client_id=None, status=None):
         if subgraph_id is None and client_id is None:
             return None
@@ -995,20 +977,20 @@ class DBManager:
 
     def create_objective(self, **kwargs):
         # print(kwargs)
-        return self.add('objective', **kwargs)
+        return self.add("objective", **kwargs)
 
     def update_objective(self, objective_id, **kwargs):
-        return self.update('objective', objective_id, **kwargs)
+        return self.update("objective", objective_id, **kwargs)
 
     def get_objective(self, objective_id):
-        return self.get('objective', objective_id)
+        return self.get("objective", objective_id)
 
     def find_active_objective(self, client_id):
         Session = self.get_session()
         with Session.begin() as session:
             objectives = (
                 session.query(Objective)
-                    .filter(or_(Objective.status == 'pending', Objective.status == 'active'))
+                    .filter(or_(Objective.status == "pending", Objective.status == "active"))
                     .all()
             )
             for objective in objectives:
@@ -1022,15 +1004,15 @@ class DBManager:
             return session.query(Objective).all()
 
     def create_objective_client_mapping(self, **kwargs):
-        return self.add('objective_client_mapping', **kwargs)
+        return self.add("objective_client_mapping", **kwargs)
 
     def update_objective_client_mapping(self, objective_client_mapping_id, **kwargs):
         return self.update(
-            'objective_client_mapping', objective_client_mapping_id, **kwargs,
+            "objective_client_mapping", objective_client_mapping_id, **kwargs
         )
 
     def get_objective_client_mapping(self, objective_client_mapping_id):
-        return self.get('objective_client_mapping', objective_client_mapping_id)
+        return self.get("objective_client_mapping", objective_client_mapping_id)
 
     def get_objective_client_mappings(self):
         Session = self.get_session()
@@ -1060,7 +1042,7 @@ class DBManager:
                 )
             else:
                 return session.query(ObjectiveClientMapping).filter(
-                    ObjectiveClientMapping.objective_id == objective_id,
+                    ObjectiveClientMapping.objective_id == objective_id
                 )
 
     """
@@ -1068,19 +1050,19 @@ class DBManager:
     """
 
     def create_client_sid_mapping(self, **kwargs):
-        return self.add('client_sid_mapping', **kwargs)
+        return self.add("client_sid_mapping", **kwargs)
 
     def update_client_sid_mapping(self, client_sid_mapping_id, **kwargs):
-        return self.update('client_sid_mapping', client_sid_mapping_id, **kwargs)
+        return self.update("client_sid_mapping", client_sid_mapping_id, **kwargs)
 
     def get_client_sid_mapping(self, client_sid_mapping_id):
-        return self.get('client_sid_mapping', client_sid_mapping_id)
+        return self.get("client_sid_mapping", client_sid_mapping_id)
 
     def delete_client_sid_mapping(self, sid):
         Session = self.get_session()
         with Session.begin() as session:
             obj = session.query(ClientSIDMapping).filter(
-                ClientSIDMapping.sid == sid,
+                ClientSIDMapping.sid == sid
             ).first()
             session.delete(obj)
 
@@ -1112,7 +1094,7 @@ class DBManager:
 
     def get_op_output(self, op_id):
         op = self.get_op(op_id)
-        if op.outputs is None or op.outputs == 'null':
+        if op.outputs is None or op.outputs == "null":
             return None
 
         data_id = json.loads(op.outputs)[0]
@@ -1124,9 +1106,9 @@ class DBManager:
         for subgraph_id in subgraph_dictionary:
             op_list_complexity = 0
             for op_id in subgraph_dictionary[subgraph_id]:
-                # current_graph_id = self.get_op(op_id).graph_id
+                current_graph_id = self.get_op(op_id).graph_id
                 op = self.get_op(op_id)
-                if op.status == 'pending':
+                if op.status == "pending":
                     op_list_complexity += self.get_op(op_id).complexity
             subgraph_dictionary[subgraph_id] = op_list_complexity
         if len(subgraph_dictionary) > 0:
@@ -1149,9 +1131,9 @@ class DBManager:
         complexity = 0
         for op in ops:
             op_obj = self.get_op(op_id=op)
-            if op_obj.billed == 'False':
+            if op_obj.billed == "False":
                 complexity += op_obj.complexity
-                self.update_op(op_obj, billed='True')
+                self.update_op(op_obj, billed="True")
 
         return complexity
 
@@ -1170,19 +1152,17 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             last_element = session.query(SubGraph).filter(SubGraph.graph_id == graph_id).order_by(
-                SubGraph.id.desc(),
-            ).first()
+                SubGraph.id.desc()).first()
             if last_element is not None:
                 if last_element.id > 10:
                     return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).order_by(
-                        SubGraph.id.desc(),
-                    ).limit(10)[::-1]
+                        SubGraph.id.desc()).limit(10)[::-1]
 
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).all()
 
     def get_last_10_computed_subgraphs(self, graph_id):
         """
-        Get last 10 computed subgraphs belonging to a graph
+        Get last 10 subgraphs belonging to a graph
         """
         Session = self.get_session()
         with Session.begin() as session:
@@ -1198,7 +1178,7 @@ class DBManager:
     def get_lin_op_data_ids(self, graph_id):
         Session = self.get_session()
         with Session.begin() as session:
-            ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.operator == 'lin')).all()
+            ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.operator == "lin")).all()
             data_file_paths = []
             for op in ops:
                 data_obj = self.get_data(data_id=ast.literal_eval(op.outputs)[0])
@@ -1211,16 +1191,13 @@ class DBManager:
         """
         Session = self.get_session()
         with Session.begin() as session:
-            return session.query(SubGraph).filter(
-                and_(
-                    SubGraph.graph_id == graph_id,
-                    SubGraph.status != 'computed',
-                    SubGraph.status != 'standby',
-                    SubGraph.status != 'failed',
-                    SubGraph.status != 'computing',
-                    SubGraph.status != 'assigned',
-                ),
-            ).all()
+            return session.query(SubGraph).filter(and_(SubGraph.graph_id == graph_id,
+                                                       SubGraph.status != 'computed',
+                                                       SubGraph.status != 'standby',
+                                                       SubGraph.status != 'failed',
+                                                       SubGraph.status != 'computing',
+                                                       SubGraph.status != 'assigned'
+                                                       )).all()
 
     def get_first_ready_subgraph_from_graph(self, graph_id):
         """
@@ -1229,8 +1206,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(SubGraph).filter(
-                and_(SubGraph.graph_id == graph_id, SubGraph.status == 'ready'),
-            ).first()
+                and_(SubGraph.graph_id == graph_id, SubGraph.status == 'ready')).first()
 
     def get_first_non_computed_subgraph(self, graph_id):
         """
@@ -1239,8 +1215,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(SubGraph).filter(
-                and_(SubGraph.graph_id == graph_id, SubGraph.status != 'computed'),
-            ).first()
+                and_(SubGraph.graph_id == graph_id, SubGraph.status != "computed")).first()
 
     def get_first_active_subgraph_from_graph(self, graph_id):
         """
@@ -1249,8 +1224,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
-                or_(SubGraph.status == 'ready', SubGraph.status == 'not_ready', SubGraph.status == 'standby'),
-            ).first()
+                or_(SubGraph.status == 'ready', SubGraph.status == 'not_ready', SubGraph.status == 'standby')).first()
 
     def get_ready_subgraphs_from_graph(self, graph_id):
         """
@@ -1259,8 +1233,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
-                SubGraph.status == 'ready',
-            ).all()
+                SubGraph.status == 'ready').all()
 
     def get_not_ready_subgraphs_from_graph(self, graph_id):
         """
@@ -1269,8 +1242,7 @@ class DBManager:
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
-                SubGraph.status == 'not_ready',
-            ).all()
+                SubGraph.status == 'not_ready').all()
 
     def get_subgraphs_from_graph(self, graph_id):
         """
@@ -1282,31 +1254,12 @@ class DBManager:
                 or_(
                     SubGraph.status == 'ready',
                     SubGraph.status == 'computing',
-                    SubGraph.status == 'assigned',
-                ),
-            ).all()
-
-    def get_subgraphs(self, graph_id=None, status=None):
-        """
-        Find subgraphs
-        """
-        Session = self.get_session()
-        with Session.begin() as session:
-            if status is not None and graph_id is not None:
-                return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
-                        SubGraph.status == status
-                ).all()
-            elif graph_id is not None:
-                return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).all()
-            elif status is not None:
-                return session.query(SubGraph).filter(
-                    SubGraph.status == status
-                ).all()
+                    SubGraph.status == 'assigned')).all()
 
     def get_if_failed_from_graph(self, graph_id):
         Session = self.get_session()
         with Session.begin() as session:
-            return session.query(Graph).filter(Graph.id == graph_id).filter(Graph.failed_subgraph == 'True')
+            return session.query(Graph).filter(Graph.id == graph_id).filter(Graph.failed_subgraph == "True").all()
 
     def get_failed_subgraphs_from_graph(self, graph):
         """
@@ -1316,18 +1269,14 @@ class DBManager:
         with Session.begin() as session:
             graph_id = graph.id
             if graph.status != 'failed':
-                # failed_ops = session.query(Op).filter(Op.graph_id == graph_id).filter(
-                # Op.status == 'failed').all()
-                # #, Op.message == 'values passed to tensor(values) must be a number/boolean/string
-                # or an array of numbers/booleans/strings, or a TypedArray')).all()
+                # failed_ops = session.query(Op).filter(Op.graph_id == graph_id).filter(Op.status == 'failed').all()#, Op.message == 'values passed to tensor(values) must be a number/boolean/string or an array of numbers/booleans/strings, or a TypedArray')).all()
                 # unique_subgraph_ids = []
                 # for failed_op in failed_ops:
                 #     if failed_op.subgraph_id not in unique_subgraph_ids:
                 #         unique_subgraph_ids.append(failed_op.subgraph_id)
                 # return unique_subgraph_ids
                 failed_subgraphs = session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
-                    SubGraph.status == 'failed',
-                ).order_by(SubGraph.id.desc()).limit(30)[::-1]
+                    SubGraph.status == 'failed').order_by(SubGraph.id.desc()).limit(30)[::-1]
                 unique_subgraph_ids = []
                 for failed_subgraph in failed_subgraphs:
                     if failed_subgraph.subgraph_id not in unique_subgraph_ids:
@@ -1342,10 +1291,8 @@ class DBManager:
         """
         Session = self.get_session()
         with Session.begin() as session:
-            subgraph = session.query(SubGraph).filter(
-                SubGraph.subgraph_id == subgraph_id,
-                SubGraph.graph_id == graph_id,
-            ).first()
+            subgraph = session.query(SubGraph).filter(SubGraph.subgraph_id == subgraph_id,
+                                                      SubGraph.graph_id == graph_id).first()
             return subgraph
 
     def delete_subgraph(self, subgraph_id, graph_id):
@@ -1360,7 +1307,7 @@ class DBManager:
         pending_ops = []
         for op in op_ids:
             op_obj = self.get_op(op)
-            if op_obj.status == 'pending':
+            if op_obj.status == "pending":
                 pending_ops.append(op_obj)
         subgraph_complexity = 0
         for pending_op in pending_ops:
@@ -1369,7 +1316,7 @@ class DBManager:
         self.update_subgraph(subgraph, complexity=subgraph_complexity)
 
         if subgraph_complexity == 0:
-            self.update_subgraph(subgraph, status='computed')
+            self.update_subgraph(subgraph, status="computed")
 
         # return subgraph_complexities_list
 
@@ -1412,3 +1359,13 @@ class DBManager:
                 return graphs
         else:
             return None
+
+    def get_latest_start_backward_marker(self, graph_id=None):
+        Session = self.get_session()
+        with Session.begin() as session:
+            start_backward_marker_op = session.query(Op).filter(Op.graph_id == graph_id).filter(and_(
+                Op.operator == "start_backward_marker",
+                Op.status == "computed",
+                )).order_by(Op.id.desc()).first()
+
+            return start_backward_marker_op
