@@ -75,6 +75,7 @@ class Client(Base):
     sid = Column(String(100), nullable=False)
     client_ip = Column(String(20), nullable=True)
     status = Column(String(20), nullable=False, default="disconnected")
+    port = Column(Integer, nullable=True, default=None)
 
     client_sids = relationship("ClientSIDMapping", backref="client", lazy="dynamic")
 

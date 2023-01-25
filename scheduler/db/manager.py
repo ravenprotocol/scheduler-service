@@ -344,12 +344,9 @@ class DBManager(object):
         """
         Get an existing graph
         """
-        if graph_id is not None:
-            Session = self.get_session()
-            with Session.begin() as session:
-                return session.query(Graph).get(graph_id)
-        else:
-            return None
+        Session = self.get_session()
+        with Session.begin() as session:
+            return session.query(Graph).get(graph_id)
 
     def create_graph(self):
         """

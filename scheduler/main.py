@@ -447,7 +447,7 @@ def assign_subgraphs_to_clients(current_graph_id):
                     ravdb.update_client(client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
                                         current_graph_id=subgraph.graph_id)
                     g.logger.debug("Assigned Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
-                res = requests.get("http://localhost:8081/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.cid, subgraph.subgraph_id, subgraph.graph_id))
+                res = requests.get("http://localhost:{}/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.cid, subgraph.subgraph_id, subgraph.graph_id))
                 if res.status_code == 300:
                     ravdb.update_subgraph(subgraph, status='ready', complexity=15)
                     g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
