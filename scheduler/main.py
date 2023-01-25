@@ -330,7 +330,7 @@ def run_scheduler():
         if c % 10 == 0:
             update_client_status()
             c = 0
-        forward_distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True", computation_mode="forward")
+        forward_distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
         federated_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="federated", execute="True")
 
         if len(forward_distributed_graphs) == 0 and len(federated_graphs) == 0:

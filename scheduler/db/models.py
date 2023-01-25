@@ -40,8 +40,6 @@ class Graph(Base):
     # Status of this graph 1. pending 2. computing 3. computed 4. failed
     status = Column(String(10), default="pending")
 
-    computation_mode = Column(String(10), default='forward')
-
     failed_subgraph = Column(Text, nullable=True, default="False")
 
     message = Column(Text, nullable=True)

@@ -261,8 +261,6 @@ class DBManager(object):
         """
 
         graph = self.get_graph(graph_id)
-        if graph.computation_mode == "backward":
-            return {}
 
         Session = self.get_session()
         with Session.begin() as session:
@@ -614,7 +612,7 @@ class DBManager(object):
             else:
                 return session.query(Op).filter(Op.graph_id is None).all()
 
-    def get_graphs(self, status=None, approach=None, execute=None, computation_mode=None):
+    def get_graphs(self, status=None, approach=None, execute=None):
         """
         Get a list of graphs
         """
@@ -629,9 +627,6 @@ class DBManager(object):
 
             if execute is not None:
                 graphs = graphs.filter(Graph.execute == execute)
-
-            if computation_mode is not None:
-                graphs = graphs.filter(Graph.computation_mode == computation_mode)
 
             return graphs.all()
 
