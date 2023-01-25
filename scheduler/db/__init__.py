@@ -7,6 +7,8 @@ from .models import (
     ClientOpMapping,
     ObjectiveClientMapping,
     Objective,
+    Base,
+    SubGraph
 )
 
 ravdb = DBManager()
