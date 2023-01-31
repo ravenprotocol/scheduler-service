@@ -465,6 +465,17 @@ def pop_failed_subgraphs_from_queue(current_graph_id):
                     temp_Queue.remove((queue_subgraph_id, queue_graph_id))
                     print("\nPopped from Failed Queue: ", (queue_subgraph_id, queue_graph_id))
             Queue = temp_Queue
+    
+    # Check for sub_graphs and their status
+    subgraph_client_mappings_computing = ravdb.find_subgraph_client_mappings(graph_id=current_graph_id, status="computing")
+
+    for mapping in subgraph_client_mappings_computing:
+        subgraph = ravdb.get_subgraph(subgraph_id=mapping.subgraph_id, graph_id=mapping.graph_id)
+        if (datetime.datetime.utcnow() - mapping.sent_time).seconds > subgraph.complexity * 4 * 60:
+            g.logger.debug("Clear mapping")
+            clear_assigned_subgraphs(mapping)
+        else:
+            g.logger.debug("active:{}".format(mapping.id))
 
 def update_client_status():
     clients = ravdb.get_idle_connected_clients(status='connected')
@@ -512,6 +523,29 @@ def disconnect_client(client):
 
         if os.path.exists(local_zip_file_path):
             os.remove(local_zip_file_path)
+
+def clear_assigned_subgraphs(mapping):
+    """
+    Clear assigned subgraphs
+    """
+    # 1. Update subgraph_client_mapping
+    ravdb.update_subgraph_client_mapping(mapping.id, status="failed")
+
+    # 2. Update subgraph status
+    subgraph = ravdb.get_subgraph(subgraph_id=mapping.subgraph_id, graph_id=mapping.graph_id)
+    ravdb.update_subgraph(subgraph, status=SubgraphStatus.READY, optimized="False")
+
+    # 3. Update op statuses
+    op_ids = ast.literal_eval(subgraph.op_ids)
+    for op_id in op_ids:
+        op = ravdb.get_op(op_id)
+        if op.status != "computed":
+            ravdb.update_op(op, status=OpStatus.PENDING, subgraph_id=subgraph.subgraph_id)
+
+    # 4. Update client status
+    client_id = mapping.client_id
+    client = ravdb.get_client(client_id)
+    ravdb.update_client(client, reporting="broken_connection", current_subgraph_id=None, current_graph_id=None)
 
 if __name__ == '__main__':
     run_scheduler()
