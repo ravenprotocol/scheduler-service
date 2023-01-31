@@ -447,6 +447,8 @@ def assign_subgraphs_to_clients(current_graph_id):
                     ravdb.update_client(client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
                                         current_graph_id=subgraph.graph_id)
                     g.logger.debug("Assigned Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
+                    ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
+                                                                     subgraph_id=subgraph.subgraph_id)
                 res = requests.get("http://localhost:{}/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.cid, subgraph.subgraph_id, subgraph.graph_id))
                 if res.status_code == 300:
                     ravdb.update_subgraph(subgraph, status='ready', complexity=15)
@@ -466,16 +468,13 @@ def pop_failed_subgraphs_from_queue(current_graph_id):
                     print("\nPopped from Failed Queue: ", (queue_subgraph_id, queue_graph_id))
             Queue = temp_Queue
     
-    # Check for sub_graphs and their status
-    subgraph_client_mappings_computing = ravdb.find_subgraph_client_mappings(graph_id=current_graph_id, status="computing")
+    # # Check for sub_graphs and their status
+    # subgraph_client_mappings_computing = ravdb.find_subgraph_client_mappings(graph_id=current_graph_id, status="computing")
 
-    for mapping in subgraph_client_mappings_computing:
-        subgraph = ravdb.get_subgraph(subgraph_id=mapping.subgraph_id, graph_id=mapping.graph_id)
-        if (datetime.datetime.utcnow() - mapping.sent_time).seconds > subgraph.complexity * 4 * 60:
-            g.logger.debug("Clear mapping")
-            clear_assigned_subgraphs(mapping)
-        else:
-            g.logger.debug("active:{}".format(mapping.id))
+    # for mapping in subgraph_client_mappings_computing:
+    #     subgraph = ravdb.get_subgraph(subgraph_id=mapping.subgraph_id, graph_id=mapping.graph_id)
+    #     if (datetime.datetime.utcnow() - mapping.sent_time).seconds > subgraph.complexity * 4 * 60:
+    #         clear_assigned_subgraphs(mapping)
 
 def update_client_status():
     clients = ravdb.get_idle_connected_clients(status='connected')
