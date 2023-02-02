@@ -72,6 +72,7 @@ class Client(Base):
     role = Column(String(20), nullable=True)
     sid = Column(String(100), nullable=False)
     client_ip = Column(String(20), nullable=True)
+    affiliated_graph_id = Column(Integer, nullable=True, default=None)
     status = Column(String(20), nullable=False, default="disconnected")
     port = Column(Integer, nullable=True, default=None)
 

@@ -654,18 +654,21 @@ class DBManager(object):
                 return session.query(Client).filter(Client.role == 'contributor').filter(
                     or_(Client.reporting == 'idle', Client.reporting == 'busy')).all()
 
-    def get_idle_clients(self, reporting=None):
+    def get_idle_clients(self, reporting=None, affiliated_graph_id=None):
         """
         Get a list of idle clients based on reporting column
         """
         Session = self.get_session()
         with Session.begin() as session:
-            if reporting is not None:
-                return session.query(Client).filter(Client.role == 'contributor').filter(
-                    Client.status == 'connected').filter(Client.reporting == reporting).all()
+            if affiliated_graph_id is not None:
+                if reporting is not None:
+                    return session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                        Client.status == 'connected').filter(Client.reporting == reporting).all()
+                else:
+                    return session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                        Client.status == 'connected').all()
             else:
-                return session.query(Client).filter(Client.role == 'contributor').filter(
-                    Client.status == 'connected').all()
+                return None
 
     def get_available_clients(self):
         """

@@ -418,7 +418,7 @@ def assign_subgraphs_to_clients(current_graph_id):
         if not ready_flag:
             continue
 
-        idle_clients = ravdb.get_idle_clients(reporting=ClientStatus.IDLE)
+        idle_clients = ravdb.get_idle_clients(reporting=ClientStatus.IDLE, affiliated_graph_id=current_graph_id)
         if idle_clients is not None:
             op_ids = ast.literal_eval(subgraph.op_ids)
             prelim_times = {}
