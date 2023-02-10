@@ -1214,7 +1214,8 @@ class DBManager(object):
                                                        SubGraph.status != 'standby',
                                                        SubGraph.status != 'failed',
                                                        SubGraph.status != 'computing',
-                                                       SubGraph.status != 'assigned'
+                                                       SubGraph.status != 'assigned',
+                                                       SubGraph.status != 'hold'
                                                        )).all()
 
     def get_first_ready_subgraph_from_graph(self, graph_id):
