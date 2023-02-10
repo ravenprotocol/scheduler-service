@@ -183,7 +183,7 @@ def vertical_split(graph_id, minimum_split_size):
                                               op_ids=str(subgraph_op_ids), retry_attempts=0, complexity=2)
 
                     if len(op_ids) != 0:
-                        if subgraph.status != 'assigned' and subgraph.status != 'computing':
+                        if subgraph.status != 'assigned' and subgraph.status != 'computing' and subgraph.status != 'hold':
                             ravdb.update_subgraph(subgraph, op_ids=str(subgraph_op_ids), complexity=3)
 
         break
@@ -194,7 +194,7 @@ def vertical_split(graph_id, minimum_split_size):
     new_op_dependency = {}
     for subgraph_id in op_dependency:
         subgraph = ravdb.get_subgraph(subgraph_id=subgraph_id, graph_id=graph_id)
-        if subgraph is not None and subgraph.status != 'standby' and subgraph.status != 'computed' and subgraph.status != 'computing' and subgraph.status != "assigned" and subgraph.status != "failed":
+        if subgraph is not None and subgraph.status != 'standby' and subgraph.status != 'computed' and subgraph.status != 'computing' and subgraph.status != "assigned" and subgraph.status != "failed" and subgraph.status != "hold":
             if subgraph.optimized == "False":
                 G = nx.DiGraph()
                 op_ids = ast.literal_eval(subgraph.op_ids)
@@ -373,7 +373,7 @@ def handle_failed_subgraphs(distributed_graph, current_graph_id):
     failed_subgraph_ids = get_failed_subgraphs_from_queue(current_graph_id)
     for subgraph_id in failed_subgraph_ids:
         subgraph = ravdb.get_subgraph(subgraph_id=subgraph_id, graph_id=current_graph_id)
-        if subgraph.status != "assigned" and subgraph.status != "computing" and subgraph.status != "computed":
+        if subgraph.status != "assigned" and subgraph.status != "computing" and subgraph.status != "computed" and subgraph.status != "hold":
             if subgraph.has_failed != "True" or subgraph.status == "failed":
                 op_ids = ast.literal_eval(subgraph.op_ids)
                 for op_id in op_ids:
@@ -496,32 +496,40 @@ def disconnect_client(client):
     ravdb.update_client(client, status="disconnected", reporting='ready', disconnected_at=datetime.datetime.utcnow())
     assigned_subgraph = ravdb.get_subgraph(client.current_subgraph_id, client.current_graph_id)
     if assigned_subgraph is not None:
+        failure_flag = False
         if assigned_subgraph.retry_attempts > 0:
-            ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", retry_attempts=assigned_subgraph.retry_attempts - 1, complexity=666)
+            if assigned_subgraph.status != "computed" and assigned_subgraph.status != "hold":
+                failure_flag = True
+                ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", retry_attempts=assigned_subgraph.retry_attempts - 1, complexity=666)
         else:
-            ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", complexity=666)
+            if assigned_subgraph.status != "computed" and assigned_subgraph.status != "hold":
+                failure_flag = True
+                ravdb.update_subgraph(assigned_subgraph, status="failed", has_failed="False", complexity=666)
 
         graph = ravdb.get_graph(graph_id=assigned_subgraph.graph_id)
-        ravdb.update_graph(graph, failed_subgraph="True")
+        if failure_flag:
+            ravdb.update_graph(graph, failed_subgraph="True")
         current_subgraph_id = client.current_subgraph_id
         current_graph_id = client.current_graph_id
         ravdb.update_client(client, current_subgraph_id=None, current_graph_id=None)
 
-        zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/zip_{}_{}.zip'.format(
-            current_subgraph_id,
-            current_graph_id,
-        )
+        # zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/zip_{}_{}.zip'.format(
+        #     current_subgraph_id,
+        #     current_graph_id,
+        # )
 
-        if os.path.exists(zip_file_path):
-            os.remove(zip_file_path)
+        # if os.path.exists(zip_file_path):
+        #     os.remove(zip_file_path)
 
-        local_zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/local_{}_{}.zip'.format(
-            current_subgraph_id,
-            current_graph_id,
-        )
+        if failure_flag:
 
-        if os.path.exists(local_zip_file_path):
-            os.remove(local_zip_file_path)
+            local_zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/local_{}_{}.zip'.format(
+                current_subgraph_id,
+                current_graph_id,
+            )
+
+            if os.path.exists(local_zip_file_path):
+                os.remove(local_zip_file_path)
 
 def clear_assigned_subgraphs(mapping):
     """
