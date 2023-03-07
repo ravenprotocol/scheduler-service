@@ -260,8 +260,6 @@ class DBManager(object):
         Get op_dependencies of a given graph
         """
 
-        graph = self.get_graph(graph_id)
-
         Session = self.get_session()
         with Session.begin() as session:
 
@@ -272,52 +270,50 @@ class DBManager(object):
             # ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status == 'pending')).limit(70).offset(140).all()
             start_index = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status == 'pending')).first()
 
-            stop_backward_marker = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.status != 'computed', Op.operator == 'stop_backward_marker')).first()
-
             if start_index is not None:
-                start_index = start_index.id
+                
+                subgraph_ops = {}
+                while start_index is not None:
 
-                ops = session.query(Op).filter(
-                        and_(Op.id >= start_index, 
-                        Op.id <= start_index + minimum_split_size * 2, 
-                        Op.graph_id == graph_id, Op.status == 'pending', 
-                        not_(Op.operator.contains("backward_pass_")),
-                        not_(Op.operator.contains("stop_backward_marker"))
-                        )).all()
-
-                last_op = ops[-1]
-                if 'start_backward_marker' not in last_op.operator:
-                    next_start_backward_marker = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.id > last_op.id,
-                                                    Op.status != 'computed', Op.operator == 'start_backward_marker')).first()
-                    if next_start_backward_marker is not None:
-                        next_ops = session.query(Op).filter(
-                            and_(Op.id <= next_start_backward_marker.id, 
-                            Op.id > last_op.id, 
-                            Op.graph_id == graph_id, Op.status == 'pending', 
-                            not_(Op.operator.contains("backward_pass_")),
-                            not_(Op.operator.contains("stop_backward_marker"))
+                    start_index = start_index.id
+                    ops = session.query(Op).filter(
+                            and_(Op.id >= start_index, 
+                            Op.id <= start_index + minimum_split_size * 2, 
+                            Op.graph_id == graph_id, Op.status == 'pending'
                             )).all()
 
-                        ops.extend(next_ops)
+                    last_op = ops[-1]
+                    if 'start_backward_marker' not in last_op.operator:
+                        next_start_backward_marker = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.id > last_op.id,
+                                                        Op.status != 'computed', Op.operator == 'start_backward_marker')).first()
 
-            
-                subgraph_ops = {}
+                        if next_start_backward_marker is not None:
+                            next_ops = session.query(Op).filter(
+                                and_(Op.id <= next_start_backward_marker.id, 
+                                Op.id > last_op.id, 
+                                Op.graph_id == graph_id, Op.status == 'pending'
+                                )).all()
 
-                for op in ops:
-                    if op.subgraph_id == 0:
-                        if subgraph_ops.get(max_subgraph_id + 1, None) is None:
-                            subgraph_ops[max_subgraph_id + 1] = [op.id]
+                            ops.extend(next_ops)
+
+                    last_op = ops[-1]
+                    for op in ops:
+                        if op.subgraph_id == 0:
+                            if subgraph_ops.get(max_subgraph_id + 1, None) is None:
+                                subgraph_ops[max_subgraph_id + 1] = [op.id]
+                            else:
+                                subgraph_ops[max_subgraph_id + 1].append(op.id)
+
                         else:
-                            subgraph_ops[max_subgraph_id + 1].append(op.id)
+                            if subgraph_ops.get(op.subgraph_id, None) is None:
+                                subgraph_ops[op.subgraph_id] = [op.id]
+                            else:
+                                subgraph_ops[op.subgraph_id].append(op.id)
 
-                    else:
-                        if subgraph_ops.get(op.subgraph_id, None) is None:
-                            subgraph_ops[op.subgraph_id] = [op.id]
-                        else:
-                            subgraph_ops[op.subgraph_id].append(op.id)
-
+                    max_subgraph_id = len(subgraph_ops)
+                    start_index = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.id > last_op.id, Op.status == 'pending')).first()
+                    
                 return subgraph_ops
-
             else:
                 return {}
 
@@ -327,7 +323,7 @@ class DBManager(object):
         """
         Session = self.get_session()
         with Session.begin() as session:
-            return session.query(Op).filter(and_(Op.graph_id == graph_id, Op.persist == 'True')).all()
+            return session.query(Op).filter(and_(Op.graph_id == graph_id, or_(Op.persist == 'True', Op.persist == 'save_model'))).all()
 
     def get_unemitted_ops(self, graph_id):
         """
@@ -630,6 +626,29 @@ class DBManager(object):
 
             return graphs.all()
 
+    def get_executable_graphs(self, status=None, approach=None, execute="True"):
+        """
+        Get a list of graphs
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+            graphs = session.query(Graph)
+            if status is not None:
+                graphs = graphs.filter(Graph.status == status)
+
+            if approach is not None:
+                graphs = graphs.filter(Graph.approach == approach)
+
+            if execute is not None:
+                graphs = graphs.filter(Graph.execute == execute)
+
+            executable_graphs = []
+            for graph in graphs.all():
+                if graph.required_participants == graph.active_participants or graph.started == "True":
+                    executable_graphs.append(graph)
+
+            return executable_graphs
+
     def get_clients(self, status=None):
         """
         Get a list of clients
@@ -654,18 +673,51 @@ class DBManager(object):
                 return session.query(Client).filter(Client.role == 'contributor').filter(
                     or_(Client.reporting == 'idle', Client.reporting == 'busy')).all()
 
-    def get_idle_clients(self, reporting=None):
+    def get_idle_clients(self, reporting=None, affiliated_graph_id=None):
         """
         Get a list of idle clients based on reporting column
         """
         Session = self.get_session()
         with Session.begin() as session:
-            if reporting is not None:
-                return session.query(Client).filter(Client.role == 'contributor').filter(
-                    Client.status == 'connected').filter(Client.reporting == reporting).all()
+            if affiliated_graph_id is not None:
+                if reporting is not None:
+                    return session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                        Client.status == 'connected').filter(Client.reporting == reporting).filter(Client.proportion > 0).all()
+                else:
+                    return session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                        Client.status == 'connected').filter(Client.proportion > 0).all()
             else:
-                return session.query(Client).filter(Client.role == 'contributor').filter(
-                    Client.status == 'connected').all()
+                return None
+
+    def get_max_stake_idle_client(self, reporting=None, affiliated_graph_id=None):
+        """
+        Get a Idle client with max stake
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+            if affiliated_graph_id is not None:
+                if reporting is not None:
+                    return session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                        Client.status == 'connected').filter(Client.reporting == reporting).filter(Client.proportion > 0).order_by(
+                        Client.stake.desc()).first()
+                else:
+                    return session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                        Client.status == 'connected').filter(Client.proportion > 0).filter(Client.proportion > 0).order_by(
+                        Client.stake.desc()).first()
+            else:
+                return None
+
+    def get_affiliated_clients(self, affiliated_graph_id=None, reporting = None):
+        Session = self.get_session()
+        with Session.begin() as session:
+            if affiliated_graph_id is not None:
+                clients = session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                                                Client.status == 'connected')
+                if reporting is not None:
+                    clients = clients.filter(Client.reporting == reporting)
+                return clients.all()
+            else:
+                return None
 
     def get_available_clients(self):
         """
@@ -1195,8 +1247,8 @@ class DBManager(object):
 
     def get_lin_op_data_ids(self, graph_id):
         Session = self.get_session()
-        with Session.begin() as session:
-            ops = session.query(Op).filter(and_(Op.graph_id == graph_id, Op.operator == "lin")).all()
+        with Session.begin() as session:    
+            ops = session.query(Op).filter(and_(Op.graph_id == graph_id, or_(Op.operator == "lin", Op.operator == "pytorch_model"))).all()
             data_file_paths = []
             for op in ops:
                 data_obj = self.get_data(data_id=ast.literal_eval(op.outputs)[0])
@@ -1245,14 +1297,14 @@ class DBManager(object):
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
                 or_(SubGraph.status == 'ready', SubGraph.status == 'not_ready', SubGraph.status == 'standby')).first()
 
-    def get_ready_subgraphs_from_graph(self, graph_id):
+    def get_ready_subgraphs_from_graph(self, graph_id, window):
         """
         Get existing ready subgraphs
         """
         Session = self.get_session()
         with Session.begin() as session:
             return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
-                SubGraph.status == 'ready').all()
+                SubGraph.status == 'ready').all()[:window]
 
     def get_not_ready_subgraphs_from_graph(self, graph_id):
         """
@@ -1291,6 +1343,23 @@ class DBManager(object):
                 return session.query(SubGraph).filter(
                     SubGraph.status == status
                 ).all()
+
+    def get_num_subgraphs(self, graph_id=None):
+        """
+        Find subgraphs
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+            if graph_id is not None:
+                return len(session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
+                        SubGraph.status != 'computed' 
+                        # SubGraph.status == 'standby', 
+                        # SubGraph.status == 'not_ready',
+                        # SubGraph.status == 'computing',
+                        # SubGraph.status == 'hold',
+                ).all())
+            else:
+                return 0
 
     def get_if_failed_from_graph(self, graph_id):
         Session = self.get_session()

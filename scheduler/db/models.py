@@ -21,13 +21,21 @@ class Graph(Base):
     algorithm = Column(String(50), nullable=True, default=None)  # mean, mode, linear_regression, logistic
     approach = Column(String(50), nullable=True, default=None)  # distributed, federated
 
+    #Active Participants
+    active_participants = Column(Integer, nullable=False, default=0)
+
+    #Required Participants
+    required_participants = Column(Integer, nullable=False, default=1)
+
+    #Proportioned
+    proportioned = Column(Text, nullable=True, default="False")
+
+    started = Column(Text, nullable=True, default="False")
+    
     cost = Column(Float, nullable=True, default=0)
 
-    # Store list of data ids
-    inputs = Column(Text, nullable=True)
-
-    # Store list of data ids
-    outputs = Column(Text, nullable=True)
+    #Threshold system requirements
+    system_requirements = Column(Text, nullable=True, default=None)
 
     # Subgrapgh Complexities
     subgraph = Column(Text, nullable=True)
@@ -72,6 +80,14 @@ class Client(Base):
     role = Column(String(20), nullable=True)
     sid = Column(String(100), nullable=False)
     client_ip = Column(String(20), nullable=True)
+    affiliated_graph_id = Column(Integer, nullable=True, default=None)
+
+    #Stake and proportion
+    stake = Column(Float, nullable=True, default=0)
+    proportion = Column(Integer, nullable=True)
+
+    staked_amount = Column(Float, nullable=True, default=0)
+
     status = Column(String(20), nullable=False, default="disconnected")
     port = Column(Integer, nullable=True, default=None)
 

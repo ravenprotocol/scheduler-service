@@ -114,9 +114,18 @@ def move_persisting_ops_to_developer_folder(graph_id):
         data_id = ast.literal_eval(op.outputs)[0]
         data_obj = ravdb.get_data(data_id)
         src = data_obj.file_path
-        dst = FTP_FILES_PATH + '/' + developer_name + "/" + "data_{}.pkl".format(data_id)
-        move_file(src, dst)
-        ravdb.update_data(data_obj, file_path=dst)
+        if op.persist == "True":
+            dst = FTP_FILES_PATH + '/' + developer_name + "/" + "data_{}.pkl".format(data_id)
+            move_file(src, dst)
+            ravdb.update_data(data_obj, file_path=dst)
+        else: #save_model
+            if op.operator == "forward_pass":
+                model_src = src.split('/')[:-1]
+                model_src = "/".join(model_src) + '/' + 'model_{}.pt'.format(data_id)
+                if os.path.exists(model_src):
+                    model_dst = FTP_FILES_PATH + '/' + developer_name + "/" + "model_{}.pt".format(data_id)
+                    move_file(model_src, model_dst)
+                    ravdb.update_data(data_obj, file_path=model_dst)
 
 def vertical_split(graph_id, minimum_split_size):
     op_dependency = ravdb.get_graph_op_dependency(graph_id, minimum_split_size=minimum_split_size)
@@ -145,9 +154,9 @@ def vertical_split(graph_id, minimum_split_size):
         subgraph_op_ids.sort()
 
         if subgraph is None:
-            if len(op_dependency.keys()) <= 1:
-                subgraph = ravdb.create_subgraph(subgraph_id=subgraph_id, graph_id=graph_id,
-                                                 op_ids=str(subgraph_op_ids), status=SubgraphStatus.READY, complexity=1)
+            # if len(op_dependency.keys()) <= 1:
+            subgraph = ravdb.create_subgraph(subgraph_id=subgraph_id, graph_id=graph_id,
+                                                op_ids=str(subgraph_op_ids), status=SubgraphStatus.READY, complexity=1)
         else:
             if subgraph.status != 'failed':
                 if subgraph.status == 'standby':
@@ -183,10 +192,10 @@ def vertical_split(graph_id, minimum_split_size):
                                               op_ids=str(subgraph_op_ids), retry_attempts=0, complexity=2)
 
                     if len(op_ids) != 0:
-                        if subgraph.status != 'assigned' and subgraph.status != 'computing' and subgraph.status != 'hold':
+                        if subgraph.status != 'assigned' and subgraph.status != 'computing':
                             ravdb.update_subgraph(subgraph, op_ids=str(subgraph_op_ids), complexity=3)
 
-        break
+        # break
 
     last_id = len(ravdb.get_all_subgraphs(graph_id=graph_id))
     if last_id == 0:
@@ -194,7 +203,7 @@ def vertical_split(graph_id, minimum_split_size):
     new_op_dependency = {}
     for subgraph_id in op_dependency:
         subgraph = ravdb.get_subgraph(subgraph_id=subgraph_id, graph_id=graph_id)
-        if subgraph is not None and subgraph.status != 'standby' and subgraph.status != 'computed' and subgraph.status != 'computing' and subgraph.status != "assigned" and subgraph.status != "failed" and subgraph.status != "hold":
+        if subgraph is not None and subgraph.status != 'standby' and subgraph.status != 'computed' and subgraph.status != 'computing' and subgraph.status != "assigned" and subgraph.status != "failed":
             if subgraph.optimized == "False":
                 G = nx.DiGraph()
                 op_ids = ast.literal_eval(subgraph.op_ids)
@@ -207,8 +216,9 @@ def vertical_split(graph_id, minimum_split_size):
                             for input_id in ast.literal_eval(op.inputs):
                                 input_op = ravdb.get_op(input_id)
                                 if input_op.status != "computed" and input_op.status != "computing":
-                                    G.add_edge(input_id, op_id)
-                                    inputs_computed_flag = False
+                                    if input_op.subgraph_id == 0 or input_op.subgraph_id == op.subgraph_id:
+                                        G.add_edge(input_id, op_id)
+                                        inputs_computed_flag = False
                             if inputs_computed_flag:
                                 if op.dependents is not None:
                                     dependent_ops = ast.literal_eval(op.dependents)
@@ -227,7 +237,8 @@ def vertical_split(graph_id, minimum_split_size):
                         if type(value).__name__ == "int":
                             op1 = ravdb.get_op(value)
                             if op1.status != "computed" and op1.status != "computing":
-                                G.add_edge(value, op_id)
+                                if op1.subgraph_id == 0 or op1.subgraph_id == op.subgraph_id:
+                                    G.add_edge(value, op_id)
 
                 subsubgraphs = list(nx.weakly_connected_components(G))
                 subsubgraphs = [list(x) for x in subsubgraphs]
@@ -246,7 +257,10 @@ def vertical_split(graph_id, minimum_split_size):
                     if len(new_op_dependency) == 0:
                         new_op_dependency[subgraph_id] = [op_id]
                     else:
-                        new_op_dependency[list(new_op_dependency.keys())[-1]].append(op_id)
+                        if op_id not in new_op_dependency[list(new_op_dependency.keys())[-1]]:
+                            new_op_dependency[list(new_op_dependency.keys())[-1]].append(op_id)
+
+    # print('\n\nNEW OP DEPENDENCY Length: {}'.format(len(new_op_dependency)))
 
     for subgraph_id in new_op_dependency:
         op_ids = new_op_dependency[subgraph_id]
@@ -330,7 +344,8 @@ def run_scheduler():
         if c % 10 == 0:
             update_client_status()
             c = 0
-        forward_distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
+        # forward_distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
+        forward_distributed_graphs = ravdb.get_executable_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
         federated_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="federated", execute="True")
 
         if len(forward_distributed_graphs) == 0 and len(federated_graphs) == 0:
@@ -344,13 +359,29 @@ def run_scheduler():
 
             for forward_distributed_graph in forward_distributed_graphs:
                 current_graph_id = forward_distributed_graph.id
-                ravdb.update_graph(forward_distributed_graph, inactivity=int(forward_distributed_graph.inactivity) + 1)
 
-                split_dead_subgraphs(forward_distributed_graph, current_graph_id)
+                # split_dead_subgraphs(forward_distributed_graph, current_graph_id)
+                # if forward_distributed_graph.subgraphs_created != "True":
+                #     vertical_split(current_graph_id, forward_distributed_graph.min_split_size)
+                #     ravdb.update_graph(forward_distributed_graph, inactivity=int(forward_distributed_graph.inactivity) + 1, subgraphs_created = "True")
+                # else:
+
+                if forward_distributed_graph.proportioned != "True":
+                    proportion_graph(current_graph_id, lowest_stake=0.25)
+                    if forward_distributed_graph.started == "False":
+                        ravdb.update_graph(forward_distributed_graph, proportioned = "True", started = "True", inactivity=int(forward_distributed_graph.inactivity) + 1)
+                    else:
+                        ravdb.update_graph(forward_distributed_graph, proportioned = "True", inactivity=int(forward_distributed_graph.inactivity) + 1)
+                else:
+                    if forward_distributed_graph.started == "False":
+                        ravdb.update_graph(forward_distributed_graph, started = "True", inactivity=int(forward_distributed_graph.inactivity) + 1)
+                    else:
+                        ravdb.update_graph(forward_distributed_graph, inactivity=int(forward_distributed_graph.inactivity) + 1)
+
                 handle_failed_subgraphs(forward_distributed_graph, current_graph_id)
                 assign_subgraphs_to_clients(current_graph_id)
                 pop_failed_subgraphs_from_queue(current_graph_id)
-                
+
         time.sleep(0.1)
         c += 1
 
@@ -386,8 +417,50 @@ def handle_failed_subgraphs(distributed_graph, current_graph_id):
                     
                 ravdb.update_subgraph(subgraph, status='ready', optimized='True', has_failed="True", complexity=14)
 
+def proportion_graph(graph_id, lowest_stake):
+    affiliated_clients = ravdb.get_affiliated_clients(affiliated_graph_id=graph_id)
+    num_subgraphs = ravdb.get_num_subgraphs(graph_id=graph_id)
+
+    if num_subgraphs > 0 and len(affiliated_clients) > 0:
+        temp = num_subgraphs
+        g.logger.debug("\n Num subgraphs: {}".format(num_subgraphs))
+        stake_pool = 0
+        stakes = []
+        for affiliated_client in affiliated_clients:
+            stakes.append(affiliated_client.stake)
+
+        proportions = [0] * len(stakes)
+
+        for i in range(len(stakes)):
+            if stakes[i] <= lowest_stake:
+                proportions[i] = 1
+                temp -= 1
+
+        total = 0
+
+        for i in stakes:
+            if i > lowest_stake:
+                total += i
+
+        proportionality_factor = temp / total
+
+        for i in range(len(stakes)):
+            if proportions[i] != 1:
+                proportions[i] = round(proportionality_factor * stakes[i])
+
+        sum_proportions = sum(proportions)
+
+        if sum_proportions < num_subgraphs:
+            proportions[proportions.index(max(proportions))] += num_subgraphs - sum_proportions
+        elif sum_proportions > num_subgraphs:
+            proportions[proportions.index(max(proportions))] -= num_subgraphs - sum_proportions
+
+        for i in range(len(affiliated_clients)):
+            ravdb.update_client(affiliated_clients[i], proportion = proportions[i])
+
 def assign_subgraphs_to_clients(current_graph_id):
-    subgraphs = ravdb.get_ready_subgraphs_from_graph(graph_id=current_graph_id)
+    affiliated_clients = ravdb.get_affiliated_clients(affiliated_graph_id=current_graph_id, reporting='idle')
+    subgraphs = ravdb.get_ready_subgraphs_from_graph(graph_id=current_graph_id, window=len(affiliated_clients))
     for subgraph in subgraphs:
         ready_flag = True
         op_ids = ast.literal_eval(subgraph.op_ids)
@@ -418,41 +491,25 @@ def assign_subgraphs_to_clients(current_graph_id):
         if not ready_flag:
             continue
 
-        idle_clients = ravdb.get_idle_clients(reporting=ClientStatus.IDLE)
+        idle_clients = ravdb.get_idle_clients(reporting=ClientStatus.IDLE, affiliated_graph_id=current_graph_id)
         if idle_clients is not None:
-            op_ids = ast.literal_eval(subgraph.op_ids)
-            prelim_times = {}
-            for idle_client in idle_clients:
-                idle_client_time = 0
-                for op_id in op_ids:
-                    op = ravdb.get_op(op_id=op_id)
-                    if op is not None:
-                        operator = op.operator
-                        capabilities_dict = ast.literal_eval(idle_client.capabilities)
-                        if operator not in capabilities_dict.keys():
-                            client_time = random.random() * 10
-                        else:
-                            client_time = capabilities_dict[operator]
-                        idle_client_time += client_time
-                prelim_times[idle_client.id] = idle_client_time
-            if bool(prelim_times):
-                previously_assigned_client = ravdb.get_assigned_client(subgraph_id=subgraph.subgraph_id,
-                                                                        graph_id=subgraph.graph_id)
-                if previously_assigned_client is not None:
-                    ravdb.update_subgraph(subgraph, status='assigned', complexity=150)
-                else:
-                    fastest_client_id = min(prelim_times, key=prelim_times.get)
-                    client = ravdb.get_client(id=fastest_client_id)
+            previously_assigned_client = ravdb.get_assigned_client(subgraph_id=subgraph.subgraph_id,
+                                                                    graph_id=subgraph.graph_id)
+            if previously_assigned_client is not None:
+                ravdb.update_subgraph(subgraph, status='assigned', complexity=150)
+            else:
+                client = ravdb.get_max_stake_idle_client(affiliated_graph_id=current_graph_id, reporting="idle")
+                if client is not None:
                     ravdb.update_subgraph(subgraph, status='assigned', complexity=15)
                     ravdb.update_client(client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
                                         current_graph_id=subgraph.graph_id)
                     g.logger.debug("Assigned Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
                     ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
-                                                                     subgraph_id=subgraph.subgraph_id)
-                res = requests.get("http://localhost:{}/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.cid, subgraph.subgraph_id, subgraph.graph_id))
-                if res.status_code == 300:
-                    ravdb.update_subgraph(subgraph, status='ready', complexity=15)
-                    g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
+                                                                        subgraph_id=subgraph.subgraph_id)
+                    res = requests.get("http://localhost:{}/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.cid, subgraph.subgraph_id, subgraph.graph_id))
+                    if res.status_code == 300:
+                        ravdb.update_subgraph(subgraph, status='ready', complexity=15)
+                        g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
 
 def pop_failed_subgraphs_from_queue(current_graph_id):
     global Queue
