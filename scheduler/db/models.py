@@ -4,8 +4,6 @@ from sqlalchemy import Column, Float, Integer, String, DateTime, Text, ForeignKe
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-from ..strings import Status
-
 Base = declarative_base()
 
 
@@ -52,8 +50,6 @@ class Graph(Base):
 
     message = Column(Text, nullable=True)
 
-    inactivity = Column(Integer, default=0)
-
     owner = Column(String(100), nullable=True)
 
     min_split_size = Column(Integer, default=100)
@@ -66,7 +62,6 @@ class Data(Base):
     id = Column(Integer, primary_key=True)
     dtype = Column(String(20), nullable=False)
     file_path = Column(String(200), nullable=True)
-    value = Column(String(100), nullable=True)
     file_size = Column(Integer, nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -79,7 +74,6 @@ class Client(Base):
     token = Column(Text, nullable=False)
     role = Column(String(20), nullable=True)
     sid = Column(String(100), nullable=False)
-    client_ip = Column(String(20), nullable=True)
     affiliated_graph_id = Column(Integer, nullable=True, default=None)
 
     #Stake and proportion
@@ -103,8 +97,6 @@ class Client(Base):
 
     current_subgraph_id = Column(Integer, nullable=True, default=None)
     current_graph_id = Column(Integer, nullable=True, default=None)
-
-    capabilities = Column(Text, nullable=True, default=None)
 
     connected_at = Column(DateTime, default=datetime.datetime.utcnow)
     disconnected_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -237,7 +229,7 @@ class SubgraphClientMapping(Base):
     result = Column(Text, nullable=True)
 
     # 1. computing 2. computed 3. failed
-    status = Column(String(10), default=Status.PENDING)
+    status = Column(String(10), default="pending")
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

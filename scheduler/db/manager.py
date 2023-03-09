@@ -24,7 +24,7 @@ from .models import (
     ClientSIDMapping,
     SubgraphClientMapping)
 from ..config import RAVENVERSE_DATABASE_URI, MINIMUM_SPLIT_SIZE
-from ..strings import MappingStatus, OpStatus
+from ..strings import MappingStatus
 from ..utils import delete_data_file, save_data_to_file, load_data_from_file
 
 
@@ -822,7 +822,7 @@ class DBManager(object):
     def get_incomplete_op(self):
         Session = self.get_session()
         with Session.begin() as session:
-            ops = session.query(Op).filter(Op.status == OpStatus.COMPUTING).all()
+            ops = session.query(Op).filter(Op.status == 'computing').all()
 
             for op in ops:
                 op_mappings = op.op_mappings
@@ -1171,23 +1171,6 @@ class DBManager(object):
         data = self.get_data(data_id=data_id)
         data = load_data_from_file(data.file_path)
         return data
-
-    def initialize_subgraph_complexities_list(self, subgraph_dictionary):
-        for subgraph_id in subgraph_dictionary:
-            op_list_complexity = 0
-            for op_id in subgraph_dictionary[subgraph_id]:
-                current_graph_id = self.get_op(op_id).graph_id
-                op = self.get_op(op_id)
-                if op.status == "pending":
-                    op_list_complexity += self.get_op(op_id).complexity
-            subgraph_dictionary[subgraph_id] = op_list_complexity
-        if len(subgraph_dictionary) > 0:
-            subgraph_complexities_list = []
-            for i in subgraph_dictionary:
-                subgraph_complexities_list.append(subgraph_dictionary[i])
-
-        # graph = self.get_graph(graph_id=current_graph_id)
-        # self.update_graph(graph,subgraph=str(subgraph_dictionary))
 
     def get_subgraph_complexities(self, graph_id):
         graph = self.get_graph(graph_id=graph_id)
