@@ -8,7 +8,7 @@ import datetime
 import requests
 import networkx as nx
 
-from .config import FTP_FILES_PATH, MINIMUM_SPLIT_SIZE
+from .config import FTP_FILES_PATH, MINIMUM_SPLIT_SIZE, RAVENAUTH_WALLET
 from .db import ravdb
 from .globals import globals as g
 from .strings import *
@@ -260,7 +260,7 @@ def proportion_graph(graph_id, lowest_stake):
             proportions[proportions.index(max(proportions))] -= num_subgraphs - sum_proportions
 
         for i in range(len(affiliated_clients)):
-            ravdb.update_client(affiliated_clients[i], proportion = proportions[i])
+            ravdb.update_client(affiliated_clients[i], proportion = proportions[i], original_proportion = proportions[i])
 
 def assign_subgraphs_to_clients(current_graph_id):
     affiliated_clients = ravdb.get_affiliated_clients(affiliated_graph_id=current_graph_id, reporting='idle')
@@ -365,7 +365,28 @@ def disconnect_client(client):
             ravdb.update_graph(graph, failed_subgraph="True")
         current_subgraph_id = client.current_subgraph_id
         current_graph_id = client.current_graph_id
-        ravdb.update_client(client, current_subgraph_id=None, current_graph_id=None)
+
+        if client.stashed_queue is not None:
+            stashed_queue = ast.literal_eval(client.stashed_queue)
+            graph_stash_amount = stashed_queue.get(client.affiliated_graph_id,None)
+            if graph_stash_amount is not None:
+                stashed_queue[client.affiliated_graph_id] += client.staked_amount
+            else:
+                stashed_queue[client.affiliated_graph_id] = client.staked_amount
+        else:
+            stashed_queue = {}
+            stashed_queue[client.affiliated_graph_id] = client.staked_amount
+
+        # call ravenauth endpoint - /auth/wallet/
+        response = requests.put(RAVENAUTH_WALLET, {"tokens_to_stash": client.staked_amount}, headers={
+            'Authorization': "Bearer " + client.token
+        })
+
+        # if response.status_code != 200:
+        #     await g.sio.emit('invalid_graph', {"message": "Unable to update wallet tokens:{}".format(response.text)}, namespace='/client', room=client.sid)
+        #     return
+
+        ravdb.update_client(client, current_subgraph_id=None, current_graph_id=None, stashed_queue=str(stashed_queue))
 
         # zip_file_path = FTP_FILES_PATH + '/' + str(client.cid) + '/zip_{}_{}.zip'.format(
         #     current_subgraph_id,
@@ -384,6 +405,38 @@ def disconnect_client(client):
 
             if os.path.exists(local_zip_file_path):
                 os.remove(local_zip_file_path)
+
+        ravdb.update_graph(graph, active_participants = graph.active_participants - 1, proportioned = "False")
+
+    else:
+        affiliated_graph = ravdb.get_graph(client.affiliated_graph_id)
+        if affiliated_graph is not None:
+            if client.stashed_queue is not None:
+                stashed_queue = ast.literal_eval(client.stashed_queue)
+                graph_stash_amount = stashed_queue.get(client.affiliated_graph_id,None)
+                if graph_stash_amount is not None:
+                    stashed_queue[client.affiliated_graph_id] += client.staked_amount
+                else:
+                    stashed_queue[client.affiliated_graph_id] = client.staked_amount
+            else:
+                stashed_queue = {}
+                stashed_queue[client.affiliated_graph_id] = client.staked_amount
+
+            # call ravenauth endpoint - /auth/wallet/
+            print('tokens_to_stash: ', client.staked_amount)
+            response = requests.put(RAVENAUTH_WALLET, {"tokens_to_stash": client.staked_amount}, headers={
+                'Authorization': "Bearer " + client.token
+            })
+            print('response: ', response.text)
+
+            # if response.status_code != 200:
+            #     await g.sio.emit('invalid_graph', {"message": "Unable to update wallet tokens:{}".format(response.text)}, namespace='/client', room=client.sid)
+            #     return
+
+            ravdb.update_client(client, current_subgraph_id=None, current_graph_id=None, stashed_queue=str(stashed_queue))
+
+            if affiliated_graph.active_participants > 0:
+                ravdb.update_graph(affiliated_graph, active_participants = affiliated_graph.active_participants - 1, proportioned = "False")
 
 def clear_assigned_subgraphs(mapping):
     """

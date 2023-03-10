@@ -80,7 +80,10 @@ class Client(Base):
     stake = Column(Float, nullable=True, default=0)
     proportion = Column(Integer, nullable=True)
 
+    original_proportion = Column(Integer, nullable=True)
+
     staked_amount = Column(Float, nullable=True, default=0)
+    stashed_queue = Column(Text, nullable=True, default=None)
 
     status = Column(String(20), nullable=False, default="disconnected")
     port = Column(Integer, nullable=True, default=None)
