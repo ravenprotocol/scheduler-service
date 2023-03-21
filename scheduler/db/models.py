@@ -4,8 +4,6 @@ from sqlalchemy import Column, Float, Integer, String, DateTime, Text, ForeignKe
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-from ..strings import Status
-
 Base = declarative_base()
 
 
@@ -21,13 +19,21 @@ class Graph(Base):
     algorithm = Column(String(50), nullable=True, default=None)  # mean, mode, linear_regression, logistic
     approach = Column(String(50), nullable=True, default=None)  # distributed, federated
 
+    #Active Participants
+    active_participants = Column(Integer, nullable=False, default=0)
+
+    #Required Participants
+    required_participants = Column(Integer, nullable=False, default=1)
+
+    #Proportioned
+    proportioned = Column(Text, nullable=True, default="False")
+
+    started = Column(Text, nullable=True, default="False")
+    
     cost = Column(Float, nullable=True, default=0)
 
-    # Store list of data ids
-    inputs = Column(Text, nullable=True)
-
-    # Store list of data ids
-    outputs = Column(Text, nullable=True)
+    #Threshold system requirements
+    system_requirements = Column(Text, nullable=True, default=None)
 
     # Subgrapgh Complexities
     subgraph = Column(Text, nullable=True)
@@ -44,8 +50,6 @@ class Graph(Base):
 
     message = Column(Text, nullable=True)
 
-    inactivity = Column(Integer, default=0)
-
     owner = Column(String(100), nullable=True)
 
     min_split_size = Column(Integer, default=100)
@@ -58,7 +62,6 @@ class Data(Base):
     id = Column(Integer, primary_key=True)
     dtype = Column(String(20), nullable=False)
     file_path = Column(String(200), nullable=True)
-    value = Column(String(100), nullable=True)
     file_size = Column(Integer, nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -71,7 +74,17 @@ class Client(Base):
     token = Column(Text, nullable=False)
     role = Column(String(20), nullable=True)
     sid = Column(String(100), nullable=False)
-    client_ip = Column(String(20), nullable=True)
+    affiliated_graph_id = Column(Integer, nullable=True, default=None)
+
+    #Stake and proportion
+    stake = Column(Float, nullable=True, default=0)
+    proportion = Column(Integer, nullable=True)
+
+    original_proportion = Column(Integer, nullable=True)
+
+    staked_amount = Column(Float, nullable=True, default=0)
+    stashed_queue = Column(Text, nullable=True, default=None)
+
     status = Column(String(20), nullable=False, default="disconnected")
     port = Column(Integer, nullable=True, default=None)
 
@@ -87,8 +100,6 @@ class Client(Base):
 
     current_subgraph_id = Column(Integer, nullable=True, default=None)
     current_graph_id = Column(Integer, nullable=True, default=None)
-
-    capabilities = Column(Text, nullable=True, default=None)
 
     connected_at = Column(DateTime, default=datetime.datetime.utcnow)
     disconnected_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -221,7 +232,7 @@ class SubgraphClientMapping(Base):
     result = Column(Text, nullable=True)
 
     # 1. computing 2. computed 3. failed
-    status = Column(String(10), default=Status.PENDING)
+    status = Column(String(10), default="pending")
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
