@@ -13,6 +13,7 @@ DATA_FILES_PATH = os.path.join(PROJECT_DIR, 'files')
 
 RAVENAUTH_URL = str(os.environ.get('RAVENAUTH_URL'))
 RAVENAUTH_TOKEN_VERIFY_URL = os.path.join(RAVENAUTH_URL, 'api/token/verify/')
+RAVENAUTH_TOKEN_GET_URL = os.path.join(RAVENAUTH_URL, 'api/token/')
 RAVENAUTH_GET_USER_URL = os.path.join(RAVENAUTH_URL, 'auth/user/get')
 RAVENAUTH_WALLET = os.path.join(RAVENAUTH_URL, 'auth/wallet/')
 RAVENAUTH_WALLET_TRANSACTION = os.path.join(RAVENAUTH_URL, 'auth/wallet/transaction/')
