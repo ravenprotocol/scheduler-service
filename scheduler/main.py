@@ -9,6 +9,7 @@ import requests
 import networkx as nx
 
 from .config import FTP_FILES_PATH, MINIMUM_SPLIT_SIZE, RAVENAUTH_WALLET
+from .utils import verify_and_get_access_token
 from .db import ravdb
 from .globals import globals as g
 from .strings import *
@@ -378,8 +379,9 @@ def disconnect_client(client):
             stashed_queue[client.affiliated_graph_id] = client.staked_amount
 
         # call ravenauth endpoint - /auth/wallet/
-        response = requests.put(RAVENAUTH_WALLET, {"tokens_to_stash": client.staked_amount}, headers={
-            'Authorization': "Bearer " + client.token
+        access_token = verify_and_get_access_token()
+        response = requests.put(RAVENAUTH_WALLET, {"cid":client.cid,"tokens_to_stash": client.staked_amount}, headers={
+            'Authorization': "Bearer " + access_token
         })
 
         # if response.status_code != 200:
@@ -423,9 +425,9 @@ def disconnect_client(client):
                 stashed_queue[client.affiliated_graph_id] = client.staked_amount
 
             # call ravenauth endpoint - /auth/wallet/
-            print('tokens_to_stash: ', client.staked_amount)
-            response = requests.put(RAVENAUTH_WALLET, {"tokens_to_stash": client.staked_amount}, headers={
-                'Authorization': "Bearer " + client.token
+            access_token = verify_and_get_access_token()
+            response = requests.put(RAVENAUTH_WALLET, {"cid":client.cid, "tokens_to_stash": client.staked_amount}, headers={
+                'Authorization': "Bearer " + access_token
             })
             print('response: ', response.text)
 

@@ -82,7 +82,7 @@ class Client(Base):
 
     original_proportion = Column(Integer, nullable=True)
 
-    staked_amount = Column(Float, nullable=True, default=0)
+    staked_amount = Column(Float(precision=32), nullable=True, default=0)
     stashed_queue = Column(Text, nullable=True, default=None)
 
     status = Column(String(20), nullable=False, default="disconnected")
@@ -126,6 +126,8 @@ class SubGraph(Base):
     graph_id = Column(Integer, ForeignKey("graph.id"))
 
     subgraph_id = Column(Integer, nullable=True, default=1)
+
+    assigned_client = Column(String(100), nullable=True)
 
     cost = Column(Float, nullable=True, default=0)
 
