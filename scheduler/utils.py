@@ -4,7 +4,9 @@ import pickle as pkl
 import requests
 import numpy as np
 import logging
-from .config import DATA_FILES_PATH, RAVENAUTH_URL, RAVENVERSE_SUPERUSER_TOKEN, RAVENVERSE_SUPERUSER_USERNAME, RAVENVERSE_SUPERUSER_PASSWORD
+from .config import DATA_FILES_PATH, \
+RAVENVERSE_SUPERUSER_TOKEN, RAVENVERSE_SUPERUSER_USERNAME, \
+RAVENVERSE_SUPERUSER_PASSWORD, RAVENAUTH_TOKEN_GET_URL, RAVENAUTH_TOKEN_VERIFY_URL
 
 
 def load_data_from_file(file_path, np=None):
@@ -38,7 +40,7 @@ def save_data_to_file(data_id, data):
     return file_path
 
 def get_access_token():
-    response = requests.post(url="{}api/token/".format(RAVENAUTH_URL),
+    response = requests.post(url="{}".format(RAVENAUTH_TOKEN_GET_URL),
                              data={"username": RAVENVERSE_SUPERUSER_USERNAME,
                                    "password": RAVENVERSE_SUPERUSER_PASSWORD})
     if response.status_code == 200:
@@ -48,7 +50,7 @@ def get_access_token():
         return None
 
 def verify_and_get_access_token():
-    response = requests.post(url="{}/api/token/verify/".format(RAVENAUTH_URL),
+    response = requests.post(url="{}".format(RAVENAUTH_TOKEN_VERIFY_URL),
                              data={"token": RAVENVERSE_SUPERUSER_TOKEN})
 
     if response.status_code == 200:
