@@ -163,7 +163,6 @@ def run_scheduler():
     c = 0
     while True:
         if c % 10 == 0:
-            update_client_status()
             c = 0
         # forward_distributed_graphs = ravdb.get_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
         forward_distributed_graphs = ravdb.get_executable_graphs(status=GraphStatus.PENDING, approach="distributed", execute="True")
@@ -308,7 +307,7 @@ def assign_subgraphs_to_clients(current_graph_id):
                     ravdb.update_subgraph(subgraph, status='assigned')
                     ravdb.update_client(client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
                                         current_graph_id=subgraph.graph_id)
-                    g.logger.debug("Assigned Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
+                    g.logger.debug("Assigned: {} / {} ----> Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
                     ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
                                                                         subgraph_id=subgraph.subgraph_id)
                     res = requests.get("http://localhost:{}/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.cid, subgraph.subgraph_id, subgraph.graph_id))
@@ -340,10 +339,6 @@ def update_client_status():
             time_difference = (current_time - last_active_time).seconds
         else:
             time_difference = (last_active_time - current_time).seconds
-
-        if time_difference > 30:  
-            g.logger.debug("Exceeded 30 seconds")
-            disconnect_client(client)
 
 
 def disconnect_client(client):
