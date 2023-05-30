@@ -193,7 +193,7 @@ def run_scheduler():
                         ravdb.update_graph(forward_distributed_graph)
 
                 handle_failed_subgraphs(forward_distributed_graph, current_graph_id)
-                assign_subgraphs_to_clients(current_graph_id)
+                assign_subgraphs_to_clients(forward_distributed_graph, current_graph_id)
                 pop_failed_subgraphs_from_queue(current_graph_id)
 
         time.sleep(0.1)
@@ -227,93 +227,99 @@ def proportion_graph(graph_id, lowest_stake):
     num_subgraphs = ravdb.get_num_subgraphs(graph_id=graph_id)
 
     if num_subgraphs > 0 and len(affiliated_clients) > 0:
-        temp = num_subgraphs
-        stake_pool = 0
-        stakes = []
-        for affiliated_client in affiliated_clients:
-            stakes.append(affiliated_client.stake)
+        # temp = num_subgraphs
+        # stake_pool = 0
+        # stakes = []
+        # for affiliated_client in affiliated_clients:
+        #     stakes.append(affiliated_client.stake)
 
-        proportions = [0] * len(stakes)
+        # proportions = [0] * len(stakes)
 
-        for i in range(len(stakes)):
-            if stakes[i] <= lowest_stake:
-                proportions[i] = 1
-                temp -= 1
+        # for i in range(len(stakes)):
+        #     if stakes[i] <= lowest_stake:
+        #         proportions[i] = 1
+        #         temp -= 1
 
-        total = 0
+        # total = 0
 
-        for i in stakes:
-            if i > lowest_stake:
-                total += i
+        # for i in stakes:
+        #     if i > lowest_stake:
+        #         total += i
 
-        proportionality_factor = temp / total
+        # proportionality_factor = temp / total
 
-        for i in range(len(stakes)):
-            if proportions[i] != 1:
-                proportions[i] = round(proportionality_factor * stakes[i])
+        # for i in range(len(stakes)):
+        #     if proportions[i] != 1:
+        #         proportions[i] = round(proportionality_factor * stakes[i])
 
-        sum_proportions = sum(proportions)
+        # sum_proportions = sum(proportions)
 
-        if sum_proportions < num_subgraphs:
-            proportions[proportions.index(max(proportions))] += num_subgraphs - sum_proportions
-        elif sum_proportions > num_subgraphs:
-            proportions[proportions.index(max(proportions))] -= num_subgraphs - sum_proportions
+        # if sum_proportions < num_subgraphs:
+        #     proportions[proportions.index(max(proportions))] += num_subgraphs - sum_proportions
+        # elif sum_proportions > num_subgraphs:
+        #     proportions[proportions.index(max(proportions))] -= num_subgraphs - sum_proportions
 
         for i in range(len(affiliated_clients)):
-            ravdb.update_client(affiliated_clients[i], proportion = proportions[i], original_proportion = proportions[i])
+            ravdb.update_client(affiliated_clients[i], proportion = num_subgraphs, original_proportion = num_subgraphs) #proportion = proportions[i], original_proportion = proportions[i])
 
-def assign_subgraphs_to_clients(current_graph_id):
-    affiliated_clients = ravdb.get_affiliated_clients(affiliated_graph_id=current_graph_id, reporting='idle')
-    subgraphs = ravdb.get_ready_subgraphs_from_graph(graph_id=current_graph_id, window=len(affiliated_clients))
-    for subgraph in subgraphs:
-        ready_flag = True
-        op_ids = ast.literal_eval(subgraph.op_ids)
-        for op_id in op_ids:
-            op = ravdb.get_op(op_id)
-            if op.status == "computing":
-                ready_flag = False
-                break
-            if op.inputs != 'null':
-                for input_op_id in ast.literal_eval(op.inputs):
-                    input_op = ravdb.get_op(input_op_id)
-                    if input_op.subgraph_id != subgraph.subgraph_id:
-                        if input_op.status != "computed":
-                            ready_flag = False
-                            break
+def assign_subgraphs_to_clients(graph, current_graph_id):
+    flag = ravdb.assignment_check(current_graph_id)
+    if flag:        
+        subgraph = ravdb.get_first_ready_subgraph_from_graph(graph_id=current_graph_id)
+        if subgraph is not None:
+            ready_flag = True
+            op_ids = ast.literal_eval(subgraph.op_ids)
+            for op_id in op_ids:
+                op = ravdb.get_op(op_id)
+                if op.status == "computing":
+                    ready_flag = False
+                    break
+                if op.inputs != 'null':
+                    for input_op_id in ast.literal_eval(op.inputs):
+                        input_op = ravdb.get_op(input_op_id)
+                        if input_op.subgraph_id != subgraph.subgraph_id:
+                            if input_op.status != "computed":
+                                ready_flag = False
+                                break
+                    if not ready_flag:
+                        break
+                for key, value in json.loads(op.params).items():
+                    if type(value).__name__ == "int":
+                        op1 = ravdb.get_op(value)
+                        if op1.subgraph_id != subgraph.subgraph_id:
+                            if op1.status != "computed" and "backward_pass_" not in op1.operator:
+                                ready_flag = False
+                                break
                 if not ready_flag:
                     break
-            for key, value in json.loads(op.params).items():
-                if type(value).__name__ == "int":
-                    op1 = ravdb.get_op(value)
-                    if op1.subgraph_id != subgraph.subgraph_id:
-                        if op1.status != "computed" and "backward_pass_" not in op1.operator:
-                            ready_flag = False
-                            break
-            if not ready_flag:
-                break
-
-        if not ready_flag:
-            continue
-
-        idle_clients = ravdb.get_idle_clients(reporting=ClientStatus.IDLE, affiliated_graph_id=current_graph_id)
-        if idle_clients is not None:
-            previously_assigned_client = ravdb.get_assigned_client(subgraph_id=subgraph.subgraph_id,
-                                                                    graph_id=subgraph.graph_id)
-            if previously_assigned_client is not None:
-                ravdb.update_subgraph(subgraph, status='assigned')
-            else:
-                client = ravdb.get_max_stake_idle_client(affiliated_graph_id=current_graph_id, reporting="idle")
-                if client is not None:
+            
+            if ready_flag:
+                
+                idle_clients = ravdb.get_idle_clients(reporting=ClientStatus.IDLE, affiliated_graph_id=current_graph_id)
+                if len(idle_clients) == graph.active_participants:
+                    # previously_assigned_client = ravdb.get_assigned_client(subgraph_id=subgraph.subgraph_id,
+                    #                                                         graph_id=subgraph.graph_id)
+                    # if previously_assigned_client is not None:
+                    #     ravdb.update_subgraph(subgraph, status='assigned')
+                    # else:
                     ravdb.update_subgraph(subgraph, status='assigned')
-                    ravdb.update_client(client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
+                    assigned_sids = []
+                    for client in idle_clients:
+                        ravdb.update_client(client, reporting='busy', current_subgraph_id=subgraph.subgraph_id,
                                         current_graph_id=subgraph.graph_id)
-                    g.logger.debug("Assigned: {} / {} ----> Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
-                    ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
-                                                                        subgraph_id=subgraph.subgraph_id)
-                    res = requests.get("http://localhost:{}/comms/assigned/?cid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.cid, subgraph.subgraph_id, subgraph.graph_id))
-                    if res.status_code == 300:
-                        ravdb.update_subgraph(subgraph, status='ready')
-                        g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Client: {}".format(subgraph.subgraph_id, subgraph.graph_id, client.cid))
+                        ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
+                                                                            subgraph_id=subgraph.subgraph_id)
+                        assigned_sids.append(client.sid)
+                                        
+                        res = requests.get("http://localhost:{}/comms/assigned/?sid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.sid, subgraph.subgraph_id, subgraph.graph_id))
+                
+                        
+                        if res.status_code == 300:
+                            ravdb.update_subgraph(subgraph, status='ready')
+                            g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_cids)))
+
+                    print("Assigned: {} / {} ----> Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
+                
 
 def pop_failed_subgraphs_from_queue(current_graph_id):
     global Queue

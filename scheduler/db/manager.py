@@ -673,6 +673,20 @@ class DBManager(object):
                 return session.query(Client).filter(Client.role == 'contributor').filter(
                     or_(Client.reporting == 'idle', Client.reporting == 'busy')).all()
 
+    def assignment_check(self, affiliated_graph_id=None):
+        Session = self.get_session()
+        with Session.begin() as session:
+            if affiliated_graph_id is not None:
+                all_connected_clients = session.query(Client).filter(Client.role == 'contributor').filter(Client.affiliated_graph_id == affiliated_graph_id).filter(
+                    Client.status == 'connected').filter(Client.proportion > 0).all()
+                ready_to_assign = True
+                for client in all_connected_clients:
+                    if client.reporting != 'idle':
+                        ready_flag = False
+                        break
+                return ready_to_assign
+            
+
     def get_idle_clients(self, reporting=None, affiliated_graph_id=None):
         """
         Get a list of idle clients based on reporting column
