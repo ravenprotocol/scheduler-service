@@ -192,9 +192,9 @@ def run_scheduler():
                     else:
                         ravdb.update_graph(forward_distributed_graph)
 
-                handle_failed_subgraphs(forward_distributed_graph, current_graph_id)
+                # handle_failed_subgraphs(forward_distributed_graph, current_graph_id)
                 assign_subgraphs_to_clients(forward_distributed_graph, current_graph_id)
-                pop_failed_subgraphs_from_queue(current_graph_id)
+                # pop_failed_subgraphs_from_queue(current_graph_id)
 
         time.sleep(0.1)
         c += 1
@@ -316,7 +316,7 @@ def assign_subgraphs_to_clients(graph, current_graph_id):
                         
                         if res.status_code == 300:
                             ravdb.update_subgraph(subgraph, status='ready')
-                            g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_cids)))
+                            g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
 
                     print("Assigned: {} / {} ----> Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
                 

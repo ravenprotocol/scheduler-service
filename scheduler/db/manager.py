@@ -1324,6 +1324,17 @@ class DBManager(object):
                     SubGraph.status == 'computing',
                     SubGraph.status == 'assigned')).all()
 
+    def get_active_subgraphs_from_graph(self, graph_id):
+        """
+        Get an existing subgraph
+        """
+        Session = self.get_session()
+        with Session.begin() as session:
+            return session.query(SubGraph).filter(SubGraph.graph_id == graph_id).filter(
+                and_(
+                    SubGraph.status != 'computed',
+                    SubGraph.status != 'hold')).all()
+
     def get_subgraphs(self, graph_id=None, status=None):
         """
         Find subgraphs
