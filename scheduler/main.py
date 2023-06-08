@@ -310,15 +310,16 @@ def assign_subgraphs_to_clients(graph, current_graph_id):
                         ravdb.create_subgraph_client_mapping(client_id=client.id, graph_id=subgraph.graph_id,
                                                                             subgraph_id=subgraph.subgraph_id)
                         assigned_sids.append(client.sid)
-                                        
-                        res = requests.get("http://localhost:{}/comms/assigned/?sid={}&subgraph_id={}&graph_id={}&mode=0".format(client.port,client.sid, subgraph.subgraph_id, subgraph.graph_id))
-                
-                        
-                        if res.status_code == 300:
-                            ravdb.update_subgraph(subgraph, status='ready')
-                            g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
+                    
+                    payload_creation_client = random.choice(idle_clients)
+                    res = requests.get("http://localhost:{}/comms/assigned/?sids={}&primary_sid={}&subgraph_id={}&graph_id={}&mode=0".format(payload_creation_client.port,str(assigned_sids), payload_creation_client.sid, subgraph.subgraph_id, subgraph.graph_id))
+                    g.logger.debug('Request sent to port: {}'.format(payload_creation_client.port))
+                    
+                    if res.status_code == 300:
+                        ravdb.update_subgraph(subgraph, status='ready')
+                        g.logger.debug("\nFailed to assign Subgraph ID: {} Graph ID: {} to Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
 
-                    print("Assigned: {} / {} ----> Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
+                    g.logger.debug("Assigned: {} / {} ----> Clients: {}".format(subgraph.subgraph_id, subgraph.graph_id, str(assigned_sids)))
                 
 
 def pop_failed_subgraphs_from_queue(current_graph_id):
